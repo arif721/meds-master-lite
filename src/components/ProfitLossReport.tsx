@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Download, TrendingUp, TrendingDown, Users, UserCheck, Package, Layers, Gift } from 'lucide-react';
+import { Download, TrendingUp, TrendingDown, Users, UserCheck, Package, Layers, Gift, PercentIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -132,6 +132,35 @@ export function ProfitLossReport({ period }: Props) {
           </CardContent>
         </Card>
       </div>
+
+      {/* Discount Summary Section */}
+      {metrics.totalDiscount > 0 && (
+        <Alert className="border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800">
+          <PercentIcon className="h-4 w-4 text-amber-600" />
+          <AlertTitle className="font-semibold text-amber-800 dark:text-amber-400">Discount Summary</AlertTitle>
+          <AlertDescription className="mt-2">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-3">
+              <div className="p-3 rounded-lg bg-background border">
+                <p className="text-xs text-muted-foreground">Total Discount Given</p>
+                <p className="text-lg font-bold text-amber-600">{formatCurrency(metrics.totalDiscount)}</p>
+              </div>
+              <div className="p-3 rounded-lg bg-background border">
+                <p className="text-xs text-muted-foreground">Line Discounts</p>
+                <p className="text-lg font-bold">{formatCurrency(metrics.totalLineDiscount)}</p>
+              </div>
+              <div className="p-3 rounded-lg bg-background border">
+                <p className="text-xs text-muted-foreground">Overall Discounts</p>
+                <p className="text-lg font-bold">{formatCurrency(metrics.totalOverallDiscount)}</p>
+              </div>
+              <div className="p-3 rounded-lg bg-background border">
+                <p className="text-xs text-muted-foreground italic">
+                  ⓘ Discounts are deducted from revenue, affecting Gross Profit.
+                </p>
+              </div>
+            </div>
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* Free Giveaway Section - Separate from P&L */}
       {(metrics.freeGiveawayQty > 0 || metrics.freeGiveawayCost > 0) && (

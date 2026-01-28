@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
-import { FileText, Download, TrendingUp, Package, Users, AlertTriangle, Gift, RotateCcw, Trash2, DollarSign, Loader2 } from 'lucide-react';
+import { FileText, Download, TrendingUp, Package, Users, AlertTriangle, Gift, RotateCcw, Trash2, DollarSign, Loader2, Store } from 'lucide-react';
 import { ProfitLossReport } from '@/components/ProfitLossReport';
+import { StoreDiscountSummary } from '@/components/StoreDiscountSummary';
 import { DateRangePreset, useProfitLoss, getDateRange } from '@/hooks/useProfitLoss';
 import { Button } from '@/components/ui/button';
 import { DataTable } from '@/components/DataTable';
@@ -267,7 +268,16 @@ export default function Reports() {
             <AlertTriangle className="w-4 h-4" />
             Expiry Alert
           </TabsTrigger>
+          <TabsTrigger value="discount" className="gap-2">
+            <Store className="w-4 h-4" />
+            Store Discount
+          </TabsTrigger>
         </TabsList>
+
+        {/* Store Discount Summary - New Tab */}
+        <TabsContent value="discount" className="space-y-6">
+          <StoreDiscountSummary />
+        </TabsContent>
 
         {/* Profit & Loss Report */}
         <TabsContent value="profitloss" className="space-y-6">
