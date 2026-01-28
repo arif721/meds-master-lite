@@ -1,7 +1,19 @@
-// Professional Invoice PDF Generator
+// Professional Invoice PDF Generator with TP Rate, Discount, and Amount in Words
 
 import { SalesInvoice } from '@/types';
-import { formatCurrency, formatDate } from './format';
+import { formatCurrency, formatDate, formatTimeWithSeconds, numberToWords } from './format';
+
+interface InvoiceLineData {
+  id: string;
+  productName: string;
+  quantity: number;
+  freeQuantity: number;
+  unitPrice: number; // MRP
+  tpRate: number;
+  discountType: 'AMOUNT' | 'PERCENT';
+  discountValue: number;
+  lineTotal: number;
+}
 
 interface InvoiceData {
   invoice: SalesInvoice;
@@ -9,11 +21,71 @@ interface InvoiceData {
   customerAddress?: string;
   customerPhone?: string;
   sellerName?: string;
+  storeName?: string;
   getProductName: (productId: string) => string;
+  lines?: InvoiceLineData[]; // Enhanced line data
+  showTPRate?: boolean; // Toggle to show TP Rate column
+  copyType?: 'CUSTOMER' | 'OFFICE'; // Copy type for watermark
 }
 
 export function generateInvoiceHTML(data: InvoiceData): string {
-  const { invoice, customerName, customerAddress, customerPhone, sellerName, getProductName } = data;
+  const { 
+    invoice, 
+    customerName, 
+    customerAddress, 
+    customerPhone, 
+    sellerName, 
+    storeName,
+    getProductName,
+    lines,
+    showTPRate = true, // Default ON for internal copy
+    copyType = 'CUSTOMER'
+  } = data;
+
+  const invoiceDate = new Date(invoice.date);
+  const dateStr = formatDate(invoiceDate);
+  const timeStr = formatTimeWithSeconds(invoiceDate);
+  
+  // Calculate totals
+  const subtotal = invoice.lines.reduce((sum, line) => sum + line.lineTotal, 0);
+  const amountInWords = numberToWords(invoice.totalAmount);
+
+  // Generate line items HTML
+  const lineItemsHTML = (lines || invoice.lines.map(line => ({
+    id: line.id,
+    productName: getProductName(line.productId),
+    quantity: line.quantity,
+    freeQuantity: line.freeQuantity,
+    unitPrice: line.unitPrice,
+    tpRate: 0,
+    discountType: 'AMOUNT' as const,
+    discountValue: 0,
+    lineTotal: line.lineTotal,
+  }))).map((line, index) => {
+    const discountDisplay = line.discountValue > 0 
+      ? (line.discountType === 'PERCENT' ? `${line.discountValue}%` : `৳${line.discountValue}`)
+      : '-';
+    
+    return `
+      <tr>
+        <td class="align-center">${index + 1}</td>
+        <td class="product-name">
+          ${line.productName}
+          ${line.freeQuantity > 0 ? `
+            <div class="free-line">
+              <span class="free-badge">FREE</span>
+              <span class="free-qty">+${line.freeQuantity} free</span>
+            </div>
+          ` : ''}
+        </td>
+        <td class="align-right currency">৳${line.unitPrice.toLocaleString('en-BD', { minimumFractionDigits: 2 })}</td>
+        ${showTPRate ? `<td class="align-right currency text-muted">৳${line.tpRate.toLocaleString('en-BD', { minimumFractionDigits: 2 })}</td>` : ''}
+        <td class="align-center">${line.quantity}${line.freeQuantity > 0 ? ` <span class="text-green">(+${line.freeQuantity})</span>` : ''}</td>
+        <td class="align-center text-discount">${discountDisplay}</td>
+        <td class="align-right total-cell currency">৳${line.lineTotal.toLocaleString('en-BD', { minimumFractionDigits: 2 })}</td>
+      </tr>
+    `;
+  }).join('');
 
   return `
     <!DOCTYPE html>
@@ -23,7 +95,7 @@ export function generateInvoiceHTML(data: InvoiceData): string {
       <style>
         @page {
           size: A4;
-          margin: 20mm;
+          margin: 15mm;
         }
         * { 
           margin: 0; 
@@ -36,8 +108,8 @@ export function generateInvoiceHTML(data: InvoiceData): string {
           padding: 20px;
           min-height: 100vh;
           color: #1e293b;
-          font-size: 13px;
-          line-height: 1.5;
+          font-size: 12px;
+          line-height: 1.4;
         }
         .invoice-container {
           max-width: 210mm;
@@ -48,10 +120,39 @@ export function generateInvoiceHTML(data: InvoiceData): string {
           position: relative;
         }
         
+        /* === WATERMARK === */
+        .watermark {
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%) rotate(-45deg);
+          font-size: 80px;
+          font-weight: 700;
+          color: rgba(30, 58, 95, 0.05);
+          pointer-events: none;
+          z-index: 0;
+          white-space: nowrap;
+        }
+        
         /* === TOP BAR === */
         .top-bar {
-          height: 8px;
+          height: 6px;
           background: linear-gradient(90deg, #1e3a5f 0%, #2d5a87 100%);
+        }
+        
+        /* === COPY TYPE BADGE === */
+        .copy-badge {
+          position: absolute;
+          top: 20px;
+          right: 20px;
+          padding: 4px 12px;
+          background: ${copyType === 'OFFICE' ? '#1e3a5f' : '#059669'};
+          color: white;
+          font-size: 10px;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 1px;
+          border-radius: 3px;
         }
         
         /* === HEADER SECTION === */
@@ -59,32 +160,34 @@ export function generateInvoiceHTML(data: InvoiceData): string {
           display: flex;
           justify-content: space-between;
           align-items: flex-start;
-          padding: 30px 40px 20px;
+          padding: 25px 30px 15px;
           border-bottom: 1px solid #e2e8f0;
+          position: relative;
+          z-index: 1;
         }
         .header-left {
           flex: 1;
         }
         .invoice-title {
-          font-size: 36px;
+          font-size: 32px;
           font-weight: 700;
           color: #1e3a5f;
           letter-spacing: -0.5px;
-          margin-bottom: 12px;
+          margin-bottom: 10px;
         }
         .invoice-meta {
           display: flex;
           flex-direction: column;
-          gap: 4px;
+          gap: 3px;
         }
         .invoice-meta-row {
           display: flex;
           gap: 8px;
-          font-size: 13px;
+          font-size: 12px;
         }
         .invoice-meta-label {
           color: #64748b;
-          min-width: 90px;
+          min-width: 85px;
         }
         .invoice-meta-value {
           color: #1e3a5f;
@@ -97,60 +200,62 @@ export function generateInvoiceHTML(data: InvoiceData): string {
           display: flex;
           flex-direction: column;
           align-items: flex-end;
-          gap: 8px;
+          gap: 6px;
         }
         .logo-container img {
-          width: 60px;
-          height: 60px;
+          width: 50px;
+          height: 50px;
         }
         .company-name {
-          font-size: 14px;
+          font-size: 13px;
           font-weight: 700;
           color: #1e3a5f;
         }
         .company-country {
-          font-size: 12px;
+          font-size: 11px;
           color: #64748b;
         }
         
         /* === BILLING SECTION === */
         .billing-section {
           display: flex;
-          padding: 25px 40px;
+          padding: 20px 30px;
           gap: 0;
+          position: relative;
+          z-index: 1;
         }
         .billing-box {
           flex: 1;
           min-width: 0;
         }
         .billing-box:first-child {
-          padding-right: 20px;
+          padding-right: 15px;
           border-right: 1px solid #e2e8f0;
         }
         .billing-box:last-child {
-          padding-left: 20px;
+          padding-left: 15px;
         }
         .billing-header {
           display: inline-block;
           background: #1e3a5f;
           color: white;
-          padding: 6px 16px;
+          padding: 4px 12px;
           font-weight: 600;
-          font-size: 11px;
+          font-size: 10px;
           text-transform: uppercase;
           letter-spacing: 0.5px;
-          margin-bottom: 15px;
+          margin-bottom: 10px;
           border-radius: 2px;
         }
         .billing-content {
-          font-size: 13px;
-          line-height: 1.7;
+          font-size: 12px;
+          line-height: 1.6;
         }
         .billing-name {
           font-weight: 700;
           color: #1e3a5f;
-          font-size: 14px;
-          margin-bottom: 6px;
+          font-size: 13px;
+          margin-bottom: 4px;
         }
         .billing-detail {
           color: #475569;
@@ -158,12 +263,14 @@ export function generateInvoiceHTML(data: InvoiceData): string {
         .billing-phone {
           color: #1e3a5f;
           font-weight: 500;
-          margin-top: 4px;
+          margin-top: 3px;
         }
         
         /* === ITEMS TABLE === */
         .table-container {
-          padding: 0 40px 25px;
+          padding: 0 30px 20px;
+          position: relative;
+          z-index: 1;
         }
         .items-table {
           width: 100%;
@@ -172,14 +279,13 @@ export function generateInvoiceHTML(data: InvoiceData): string {
         .items-table thead th {
           background: #1e3a5f;
           color: white;
-          padding: 12px 15px;
-          font-size: 12px;
+          padding: 10px 8px;
+          font-size: 10px;
           font-weight: 600;
           text-transform: uppercase;
           letter-spacing: 0.3px;
         }
         .items-table thead th:first-child {
-          text-align: left;
           border-radius: 4px 0 0 0;
         }
         .items-table thead th:last-child {
@@ -192,9 +298,10 @@ export function generateInvoiceHTML(data: InvoiceData): string {
           text-align: center;
         }
         .items-table tbody td {
-          padding: 14px 15px;
+          padding: 10px 8px;
           border-bottom: 1px solid #f1f5f9;
           vertical-align: middle;
+          font-size: 11px;
         }
         .items-table tbody tr:last-child td {
           border-bottom: 2px solid #e2e8f0;
@@ -217,24 +324,31 @@ export function generateInvoiceHTML(data: InvoiceData): string {
         .currency {
           font-family: 'SF Mono', 'Consolas', monospace;
         }
+        .text-muted {
+          color: #94a3b8;
+        }
+        .text-discount {
+          color: #d97706;
+          font-weight: 500;
+        }
         .free-badge {
           display: inline-block;
           background: #059669;
           color: white;
-          padding: 2px 8px;
-          border-radius: 4px;
-          font-size: 10px;
+          padding: 1px 6px;
+          border-radius: 3px;
+          font-size: 9px;
           font-weight: 600;
           text-transform: uppercase;
         }
         .free-line {
           display: flex;
           align-items: center;
-          gap: 6px;
-          margin-top: 4px;
+          gap: 5px;
+          margin-top: 3px;
         }
         .free-qty {
-          font-size: 11px;
+          font-size: 10px;
           color: #059669;
           font-weight: 500;
         }
@@ -247,30 +361,32 @@ export function generateInvoiceHTML(data: InvoiceData): string {
         .summary-section {
           display: flex;
           justify-content: space-between;
-          padding: 0 40px 25px;
-          gap: 40px;
+          padding: 0 30px 20px;
+          gap: 30px;
+          position: relative;
+          z-index: 1;
         }
         .payment-info {
           flex: 1;
-          max-width: 280px;
+          max-width: 260px;
         }
         .payment-header {
           display: inline-block;
           background: #1e3a5f;
           color: white;
-          padding: 6px 16px;
+          padding: 4px 12px;
           font-weight: 600;
-          font-size: 11px;
+          font-size: 10px;
           text-transform: uppercase;
           letter-spacing: 0.5px;
-          margin-bottom: 15px;
+          margin-bottom: 10px;
           border-radius: 2px;
         }
         .payment-row {
           display: flex;
           justify-content: space-between;
-          padding: 6px 0;
-          font-size: 13px;
+          padding: 5px 0;
+          font-size: 12px;
         }
         .payment-label {
           color: #64748b;
@@ -284,17 +400,17 @@ export function generateInvoiceHTML(data: InvoiceData): string {
         }
         
         .totals-box {
-          min-width: 220px;
+          min-width: 200px;
           background: #f8fafc;
           border-radius: 6px;
-          padding: 15px 20px;
+          padding: 12px 16px;
           border: 1px solid #e2e8f0;
         }
         .totals-row {
           display: flex;
           justify-content: space-between;
-          padding: 8px 0;
-          font-size: 13px;
+          padding: 6px 0;
+          font-size: 12px;
           border-bottom: 1px solid #e2e8f0;
         }
         .totals-row:last-of-type {
@@ -308,47 +424,76 @@ export function generateInvoiceHTML(data: InvoiceData): string {
           color: #1e293b;
           font-family: 'SF Mono', 'Consolas', monospace;
         }
+        .totals-value.discount {
+          color: #d97706;
+        }
         .totals-row.due-row {
           background: #1e3a5f;
-          margin: 10px -20px -15px;
-          padding: 12px 20px;
+          margin: 8px -16px -12px;
+          padding: 10px 16px;
           border-radius: 0 0 6px 6px;
         }
         .totals-row.due-row .totals-label,
         .totals-row.due-row .totals-value {
           color: white;
           font-weight: 700;
-          font-size: 14px;
+          font-size: 13px;
+        }
+        
+        /* === AMOUNT IN WORDS === */
+        .amount-words {
+          padding: 0 30px 15px;
+          position: relative;
+          z-index: 1;
+        }
+        .amount-words-box {
+          background: #f0fdf4;
+          border: 1px solid #86efac;
+          border-radius: 4px;
+          padding: 10px 15px;
+        }
+        .amount-words-label {
+          font-size: 10px;
+          color: #64748b;
+          text-transform: uppercase;
+          margin-bottom: 3px;
+        }
+        .amount-words-value {
+          font-size: 12px;
+          font-weight: 600;
+          color: #166534;
         }
         
         /* === SIGNATURES SECTION === */
         .signatures-section {
           display: flex;
           justify-content: space-between;
-          padding: 30px 40px 20px;
-          gap: 30px;
-          margin-top: 20px;
+          padding: 25px 30px 15px;
+          gap: 25px;
+          margin-top: 15px;
+          position: relative;
+          z-index: 1;
         }
         .signature-box {
           flex: 1;
           text-align: center;
         }
         .signature-space {
-          height: 50px;
+          height: 40px;
         }
         .signature-line {
           border-top: 1.5px solid #334155;
           width: 100%;
-          margin-bottom: 10px;
+          margin-bottom: 8px;
         }
         .signature-label {
-          font-size: 11px;
+          font-size: 10px;
           color: #64748b;
           text-transform: uppercase;
           letter-spacing: 0.3px;
         }
         .signature-name {
-          font-size: 10px;
+          font-size: 9px;
           color: #94a3b8;
           margin-top: 2px;
         }
@@ -356,23 +501,25 @@ export function generateInvoiceHTML(data: InvoiceData): string {
         /* === FOOTER === */
         .footer {
           background: linear-gradient(135deg, #e0f2fe 0%, #dbeafe 100%);
-          padding: 25px 40px;
+          padding: 20px 30px;
           margin-top: auto;
+          position: relative;
+          z-index: 1;
         }
         .footer-title {
-          font-size: 22px;
+          font-size: 18px;
           font-weight: 700;
           color: #1e3a5f;
-          margin-bottom: 8px;
+          margin-bottom: 6px;
         }
         .footer-text {
-          font-size: 12px;
+          font-size: 11px;
           color: #475569;
-          line-height: 1.6;
+          line-height: 1.5;
         }
         .footer-contact {
-          margin-top: 8px;
-          font-size: 11px;
+          margin-top: 6px;
+          font-size: 10px;
           color: #64748b;
         }
         
@@ -383,18 +530,21 @@ export function generateInvoiceHTML(data: InvoiceData): string {
         }
         .print-btn {
           display: inline-block;
-          padding: 12px 30px;
+          padding: 10px 25px;
           background: #1e3a5f;
           color: white;
           border: none;
           border-radius: 6px;
           cursor: pointer;
-          font-size: 14px;
+          font-size: 13px;
           font-weight: 500;
           margin: 0 5px;
         }
         .print-btn:hover {
           background: #2d4a6f;
+        }
+        .print-btn.secondary {
+          background: #64748b;
         }
         
         /* === PRINT STYLES === */
@@ -414,7 +564,8 @@ export function generateInvoiceHTML(data: InvoiceData): string {
           .items-table thead th,
           .billing-header,
           .payment-header,
-          .totals-row.due-row {
+          .totals-row.due-row,
+          .copy-badge {
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
           }
@@ -423,7 +574,9 @@ export function generateInvoiceHTML(data: InvoiceData): string {
     </head>
     <body>
       <div class="invoice-container">
+        <div class="watermark">${copyType === 'OFFICE' ? 'OFFICE COPY' : 'CUSTOMER COPY'}</div>
         <div class="top-bar"></div>
+        <div class="copy-badge">${copyType === 'OFFICE' ? 'Office Copy' : 'Customer Copy'}</div>
         
         <!-- Header Section -->
         <div class="header">
@@ -435,9 +588,19 @@ export function generateInvoiceHTML(data: InvoiceData): string {
                 <span class="invoice-meta-value">${invoice.invoiceNumber}</span>
               </div>
               <div class="invoice-meta-row">
-                <span class="invoice-meta-label">Invoice Date:</span>
-                <span class="invoice-meta-value">${formatDate(invoice.date)}</span>
+                <span class="invoice-meta-label">Date:</span>
+                <span class="invoice-meta-value">${dateStr}</span>
               </div>
+              <div class="invoice-meta-row">
+                <span class="invoice-meta-label">Time:</span>
+                <span class="invoice-meta-value">${timeStr}</span>
+              </div>
+              ${storeName ? `
+              <div class="invoice-meta-row">
+                <span class="invoice-meta-label">Store:</span>
+                <span class="invoice-meta-value">${storeName}</span>
+              </div>
+              ` : ''}
             </div>
           </div>
           <div class="header-right">
@@ -475,29 +638,17 @@ export function generateInvoiceHTML(data: InvoiceData): string {
           <table class="items-table">
             <thead>
               <tr>
-                <th>Description</th>
-                <th class="align-right">Rate</th>
+                <th class="align-center" style="width:40px">SL</th>
+                <th>Product</th>
+                <th class="align-right">MRP</th>
+                ${showTPRate ? '<th class="align-right">TP Rate</th>' : ''}
                 <th class="align-center">Qty</th>
+                <th class="align-center">Discount</th>
                 <th class="align-right">Total</th>
               </tr>
             </thead>
             <tbody>
-              ${invoice.lines.map((line) => `
-                <tr>
-                  <td class="product-name">
-                    ${getProductName(line.productId)}
-                    ${line.freeQuantity > 0 ? `
-                      <div class="free-line">
-                        <span class="free-badge">FREE</span>
-                        <span class="free-qty">+${line.freeQuantity} free</span>
-                      </div>
-                    ` : ''}
-                  </td>
-                  <td class="align-right currency">৳${line.unitPrice.toLocaleString('en-BD', { minimumFractionDigits: 2 })}</td>
-                  <td class="align-center">${line.quantity}${line.freeQuantity > 0 ? ` <span class="text-green">(+${line.freeQuantity})</span>` : ''}</td>
-                  <td class="align-right total-cell currency">৳${line.lineTotal.toLocaleString('en-BD', { minimumFractionDigits: 2 })}</td>
-                </tr>
-              `).join('')}
+              ${lineItemsHTML}
             </tbody>
           </table>
         </div>
@@ -508,7 +659,11 @@ export function generateInvoiceHTML(data: InvoiceData): string {
             <div class="payment-header">Payment Info</div>
             <div class="payment-row">
               <span class="payment-label">Status</span>
-              <span class="payment-value status">${invoice.status === 'CONFIRMED' ? 'Confirmed' : 'Draft'}</span>
+              <span class="payment-value status">${['CONFIRMED', 'PAID', 'PARTIAL'].includes(invoice.status) ? 'Confirmed' : invoice.status}</span>
+            </div>
+            <div class="payment-row">
+              <span class="payment-label">Seller</span>
+              <span class="payment-value">${sellerName || 'N/A'}</span>
             </div>
             <div class="payment-row">
               <span class="payment-label">Paid Amount</span>
@@ -517,7 +672,15 @@ export function generateInvoiceHTML(data: InvoiceData): string {
           </div>
           <div class="totals-box">
             <div class="totals-row">
-              <span class="totals-label">Subtotal</span>
+              <span class="totals-label">Subtotal (MRP)</span>
+              <span class="totals-value">৳${subtotal.toLocaleString('en-BD', { minimumFractionDigits: 2 })}</span>
+            </div>
+            <div class="totals-row">
+              <span class="totals-label">Overall Discount</span>
+              <span class="totals-value discount">-৳${(subtotal - invoice.totalAmount).toLocaleString('en-BD', { minimumFractionDigits: 2 })}</span>
+            </div>
+            <div class="totals-row">
+              <span class="totals-label">Net Payable</span>
               <span class="totals-value">৳${invoice.totalAmount.toLocaleString('en-BD', { minimumFractionDigits: 2 })}</span>
             </div>
             <div class="totals-row">
@@ -528,6 +691,14 @@ export function generateInvoiceHTML(data: InvoiceData): string {
               <span class="totals-label">Due</span>
               <span class="totals-value">৳${invoice.dueAmount.toLocaleString('en-BD', { minimumFractionDigits: 2 })}</span>
             </div>
+          </div>
+        </div>
+        
+        <!-- Amount in Words -->
+        <div class="amount-words">
+          <div class="amount-words-box">
+            <div class="amount-words-label">Amount in Words</div>
+            <div class="amount-words-value">${amountInWords}</div>
           </div>
         </div>
         
@@ -565,6 +736,7 @@ export function generateInvoiceHTML(data: InvoiceData): string {
       
       <div class="print-actions">
         <button class="print-btn" onclick="window.print()">🖨️ Print Invoice</button>
+        <button class="print-btn secondary" onclick="window.close()">✕ Close</button>
       </div>
     </body>
     </html>
@@ -573,6 +745,26 @@ export function generateInvoiceHTML(data: InvoiceData): string {
 
 export function openInvoiceWindow(data: InvoiceData): void {
   const html = generateInvoiceHTML(data);
+  const printWindow = window.open('', '_blank');
+  if (printWindow) {
+    printWindow.document.write(html);
+    printWindow.document.close();
+  }
+}
+
+// Open Office Copy
+export function openOfficeCopyWindow(data: InvoiceData): void {
+  const html = generateInvoiceHTML({ ...data, copyType: 'OFFICE', showTPRate: true });
+  const printWindow = window.open('', '_blank');
+  if (printWindow) {
+    printWindow.document.write(html);
+    printWindow.document.close();
+  }
+}
+
+// Open Customer Copy
+export function openCustomerCopyWindow(data: InvoiceData): void {
+  const html = generateInvoiceHTML({ ...data, copyType: 'CUSTOMER', showTPRate: false });
   const printWindow = window.open('', '_blank');
   if (printWindow) {
     printWindow.document.write(html);

@@ -76,7 +76,7 @@ export type Customer = {
   createdAt: Date;
 };
 
-export type InvoiceStatus = 'DRAFT' | 'CONFIRMED';
+export type InvoiceStatus = 'DRAFT' | 'CONFIRMED' | 'PAID' | 'PARTIAL' | 'CANCELLED';
 
 export type SalesInvoice = {
   id: string;
