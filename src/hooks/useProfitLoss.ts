@@ -25,6 +25,10 @@ export type ProfitLossMetrics = {
   netProfit: number;
   invoiceCount: number;
   profitMargin: number;
+  // Discount Metrics
+  totalLineDiscount: number;
+  totalOverallDiscount: number;
+  totalDiscount: number;
   // Free Giveaway Metrics (separate, not included in P&L)
   freeGiveawayQty: number;
   freeGiveawayCost: number;
@@ -136,6 +140,8 @@ export function useProfitLoss(filters: ProfitLossFilters) {
     let totalCOGS = 0;
     let freeGiveawayQty = 0;
     let freeGiveawayCost = 0;
+    let totalLineDiscount = 0;
+    let totalOverallDiscount = 0;
 
     filteredInvoices.forEach(invoice => {
       const lines = allInvoiceLines.filter((line: DbInvoiceLine) => line.invoice_id === invoice.id);
@@ -144,10 +150,13 @@ export function useProfitLoss(filters: ProfitLossFilters) {
       let invoiceCOGS = 0;
       let invoiceFreeQty = 0;
       let invoiceFreeCost = 0;
+      let invoiceLineDiscount = 0;
 
       lines.forEach((line: DbInvoiceLine) => {
-        // If cost_price is stored in line, use it. Otherwise fetch from batch
-        const costPrice = line.cost_price > 0 ? line.cost_price : (batchCostMap.get(line.batch_id || '') || 0);
+        // Use tp_rate if available, otherwise cost_price (legacy), otherwise batch cost
+        const tpRate = (line as any).tp_rate > 0 
+          ? (line as any).tp_rate 
+          : (line.cost_price > 0 ? line.cost_price : (batchCostMap.get(line.batch_id || '') || 0));
         
         // Apply product/category filter if set
         if (filters.productId && line.product_id !== filters.productId) return;
@@ -161,12 +170,23 @@ export function useProfitLoss(filters: ProfitLossFilters) {
         const soldQty = line.quantity || 0;
         const freeQty = line.free_quantity || 0;
         
-        invoiceCOGS += costPrice * soldQty;
+        invoiceCOGS += tpRate * soldQty;
+        
+        // Calculate line discount
+        const discountType = (line as any).discount_type || 'AMOUNT';
+        const discountValue = (line as any).discount_value || 0;
+        const mrp = line.unit_price || 0;
+        const grossLineTotal = soldQty * mrp;
+        if (discountType === 'PERCENT') {
+          invoiceLineDiscount += grossLineTotal * discountValue / 100;
+        } else {
+          invoiceLineDiscount += discountValue;
+        }
         
         // Track free giveaway separately (not in P&L totals)
         if (freeQty > 0) {
           invoiceFreeQty += freeQty;
-          invoiceFreeCost += costPrice * freeQty;
+          invoiceFreeCost += tpRate * freeQty;
         }
       });
 
@@ -195,6 +215,8 @@ export function useProfitLoss(filters: ProfitLossFilters) {
       totalCOGS += invoiceCOGS;
       freeGiveawayQty += invoiceFreeQty;
       freeGiveawayCost += invoiceFreeCost;
+      totalLineDiscount += invoiceLineDiscount;
+      totalOverallDiscount += invoice.discount || 0;
     });
 
     // Calculate return adjustments (returns that went back to stock reduce COGS)
@@ -223,6 +245,7 @@ export function useProfitLoss(filters: ProfitLossFilters) {
     const grossProfit = totalSales - totalCOGS;
     const netProfit = grossProfit + returnAdjustment - damageWriteOff;
     const profitMargin = totalSales > 0 ? (netProfit / totalSales) * 100 : 0;
+    const totalDiscount = totalLineDiscount + totalOverallDiscount;
 
     return {
       totalSales,
@@ -235,6 +258,10 @@ export function useProfitLoss(filters: ProfitLossFilters) {
       netProfit,
       invoiceCount: filteredInvoices.length,
       profitMargin,
+      // Discount metrics
+      totalLineDiscount,
+      totalOverallDiscount,
+      totalDiscount,
       // Free giveaway metrics (separate from P&L)
       freeGiveawayQty,
       freeGiveawayCost,

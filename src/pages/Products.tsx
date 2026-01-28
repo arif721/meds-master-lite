@@ -68,8 +68,8 @@ export default function Products() {
     name: '',
     category_id: '',
     unit: 'Piece' as DbProduct['unit'],
-    sales_price: '',
-    cost_price: '',
+    sales_price: '', // MRP
+    cost_price: '', // TP Rate
     sku: '',
   });
 
@@ -348,7 +348,7 @@ export default function Products() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="input-group">
-                  <Label htmlFor="cost_price">Cost Price (৳) *</Label>
+                  <Label htmlFor="cost_price">TP Rate (৳) *</Label>
                   <Input
                     id="cost_price"
                     type="number"
@@ -358,10 +358,11 @@ export default function Products() {
                     placeholder="0.00"
                     required
                   />
+                  <p className="text-xs text-muted-foreground mt-1">Trade Price / Buying Rate</p>
                 </div>
 
                 <div className="input-group">
-                  <Label htmlFor="sales_price">Sales Price (৳) *</Label>
+                  <Label htmlFor="sales_price">MRP (৳) *</Label>
                   <Input
                     id="sales_price"
                     type="number"
@@ -371,6 +372,7 @@ export default function Products() {
                     placeholder="0.00"
                     required
                   />
+                  <p className="text-xs text-muted-foreground mt-1">Maximum Retail Price</p>
                 </div>
               </div>
 
@@ -484,12 +486,14 @@ export default function Products() {
           { key: 'unit', header: 'Unit' },
           {
             key: 'cost_price',
-            header: 'Cost',
-            render: (product) => formatCurrency(Number(product.cost_price)),
+            header: 'TP Rate',
+            render: (product) => (
+              <span className="text-muted-foreground">{formatCurrency(Number(product.cost_price))}</span>
+            ),
           },
           {
             key: 'sales_price',
-            header: 'Sales Price',
+            header: 'MRP',
             render: (product) => (
               <span className="font-medium text-primary">{formatCurrency(Number(product.sales_price))}</span>
             ),

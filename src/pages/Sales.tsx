@@ -80,12 +80,17 @@ export default function Sales() {
     customerId: '',
     sellerId: '',
     storeId: '',
+    overallDiscountType: 'AMOUNT' as 'AMOUNT' | 'PERCENT',
+    overallDiscountValue: '',
     lines: [] as {
       productId: string;
       batchId: string;
       paidQuantity: string;
       freeQuantity: string;
-      unitPrice: string;
+      unitPrice: string; // MRP
+      tpRate: string; // TP Rate
+      discountType: 'AMOUNT' | 'PERCENT';
+      discountValue: string;
     }[],
   });
 
@@ -167,7 +172,16 @@ export default function Sales() {
       ...formData,
       lines: [
         ...formData.lines,
-        { productId: '', batchId: '', paidQuantity: '', freeQuantity: '0', unitPrice: '' },
+        { 
+          productId: '', 
+          batchId: '', 
+          paidQuantity: '', 
+          freeQuantity: '0', 
+          unitPrice: '', 
+          tpRate: '',
+          discountType: 'AMOUNT' as const,
+          discountValue: '0',
+        },
       ],
     });
   };
@@ -183,11 +197,12 @@ export default function Sales() {
     const newLines = [...formData.lines];
     newLines[index] = { ...newLines[index], [field]: value };
 
-    // Auto-set unit price when product is selected
+    // Auto-set unit price (MRP) and TP Rate when product is selected
     if (field === 'productId') {
       const product = dbProducts.find((p) => p.id === value);
       if (product) {
-        newLines[index].unitPrice = product.sales_price.toString();
+        newLines[index].unitPrice = product.sales_price.toString(); // MRP
+        newLines[index].tpRate = product.cost_price.toString(); // TP Rate
         newLines[index].batchId = '';
       }
     }
@@ -195,13 +210,31 @@ export default function Sales() {
     setFormData({ ...formData, lines: newLines });
   };
 
+  // Calculate line total with discount
+  const calculateLineTotal = (line: typeof formData.lines[0]) => {
+    const paidQty = parseInt(line.paidQuantity) || 0;
+    const mrp = parseFloat(line.unitPrice) || 0;
+    const subtotal = paidQty * mrp;
+    const discountValue = parseFloat(line.discountValue) || 0;
+    
+    if (line.discountType === 'PERCENT') {
+      return subtotal - (subtotal * discountValue / 100);
+    }
+    return subtotal - discountValue;
+  };
+
   const calculateTotal = () => {
-    return formData.lines.reduce((sum, line) => {
-      // Only paid quantity affects total, free quantity is excluded
-      const paidQty = parseInt(line.paidQuantity) || 0;
-      const price = parseFloat(line.unitPrice) || 0;
-      return sum + paidQty * price;
-    }, 0);
+    let lineTotal = formData.lines.reduce((sum, line) => sum + calculateLineTotal(line), 0);
+    
+    // Apply overall discount
+    const overallDiscount = parseFloat(formData.overallDiscountValue) || 0;
+    if (formData.overallDiscountType === 'PERCENT') {
+      lineTotal = lineTotal - (lineTotal * overallDiscount / 100);
+    } else {
+      lineTotal = lineTotal - overallDiscount;
+    }
+    
+    return Math.max(0, lineTotal);
   };
 
   const handleSubmit = async (e: React.FormEvent, asDraft: boolean = false) => {
@@ -291,22 +324,36 @@ export default function Sales() {
     const total = calculateTotal();
     const invoiceNumber = generateInvoiceNumber();
 
-    // Prepare invoice lines with cost price from batch
+    // Calculate overall discount amount
+    const subtotal = formData.lines.reduce((sum, line) => sum + calculateLineTotal(line), 0);
+    const overallDiscountValue = parseFloat(formData.overallDiscountValue) || 0;
+    let overallDiscountAmount = 0;
+    if (formData.overallDiscountType === 'PERCENT') {
+      overallDiscountAmount = subtotal * overallDiscountValue / 100;
+    } else {
+      overallDiscountAmount = overallDiscountValue;
+    }
+
+    // Prepare invoice lines with TP rate and discount fields
     const invoiceLines = formData.lines.map((line) => {
       const paidQty = parseInt(line.paidQuantity) || 0;
       const freeQty = parseInt(line.freeQuantity) || 0;
-      const unitPrice = parseFloat(line.unitPrice) || 0;
-      const batch = dbBatches.find(b => b.id === line.batchId);
-      const costPrice = batch?.cost_price || 0;
+      const unitPrice = parseFloat(line.unitPrice) || 0; // MRP
+      const tpRate = parseFloat(line.tpRate) || 0;
+      const discountValue = parseFloat(line.discountValue) || 0;
+      const lineTotal = calculateLineTotal(line);
       
       return {
         product_id: line.productId,
         batch_id: line.batchId,
         quantity: paidQty,
         free_quantity: freeQty,
-        unit_price: unitPrice,
-        total: paidQty * unitPrice,
-        cost_price: costPrice,
+        unit_price: unitPrice, // MRP
+        total: lineTotal,
+        cost_price: tpRate, // Legacy field
+        tp_rate: tpRate,
+        discount_type: line.discountType,
+        discount_value: discountValue,
         returned_quantity: 0,
       };
     });
@@ -320,8 +367,8 @@ export default function Sales() {
           seller_id: formData.sellerId || null,
           store_id: formData.storeId,
           status: 'DRAFT',
-          subtotal: total,
-          discount: 0,
+          subtotal: subtotal,
+          discount: overallDiscountAmount,
           total: total,
           paid: 0,
           due: total,
@@ -390,7 +437,14 @@ export default function Sales() {
   };
 
   const resetForm = () => {
-    setFormData({ customerId: '', sellerId: '', storeId: '', lines: [] });
+    setFormData({ 
+      customerId: '', 
+      sellerId: '', 
+      storeId: '', 
+      overallDiscountType: 'AMOUNT',
+      overallDiscountValue: '',
+      lines: [] 
+    });
     setCreditWarningAcknowledged(false);
   };
 
@@ -592,125 +646,170 @@ export default function Sales() {
                   );
 
                   return (
-                  <div key={index} className="grid grid-cols-12 gap-2 p-3 rounded-lg bg-muted/50">
-                    <div className="col-span-3">
-                      <Select
-                        value={line.productId}
-                        onValueChange={(value) => updateLine(index, 'productId', value)}
-                      >
-                        <SelectTrigger className="h-9">
-                          <SelectValue placeholder="Product" />
-                        </SelectTrigger>
-                        <SelectContent className="bg-popover">
-                          {availableProducts.map((product) => {
-                            const stock = getProductTotalStock(product.id);
-                            const noStock = stock === 0;
-                            return (
-                              <SelectItem 
-                                key={product.id} 
-                                value={product.id}
-                                disabled={noStock}
-                                className={noStock ? 'opacity-50' : ''}
-                              >
-                                <div className="flex items-center gap-2">
-                                  <span>{product.name}</span>
-                                  {noStock && (
-                                    <span className="text-xs px-1.5 py-0.5 rounded bg-destructive/10 text-destructive">
-                                      No Stock
-                                    </span>
-                                  )}
-                                  {!noStock && (
-                                    <span className="text-xs text-muted-foreground">
-                                      (Stock: {stock})
-                                    </span>
-                                  )}
-                                </div>
+                  <div key={index} className="p-4 rounded-lg bg-muted/50 space-y-3">
+                    {/* Row 1: Product, Batch */}
+                    <div className="grid grid-cols-12 gap-2">
+                      <div className="col-span-6">
+                        <Label className="text-xs mb-1 block">Product</Label>
+                        <Select
+                          value={line.productId}
+                          onValueChange={(value) => updateLine(index, 'productId', value)}
+                        >
+                          <SelectTrigger className="h-9">
+                            <SelectValue placeholder="Select Product" />
+                          </SelectTrigger>
+                          <SelectContent className="bg-popover">
+                            {availableProducts.map((product) => {
+                              const stock = getProductTotalStock(product.id);
+                              const noStock = stock === 0;
+                              return (
+                                <SelectItem 
+                                  key={product.id} 
+                                  value={product.id}
+                                  disabled={noStock}
+                                  className={noStock ? 'opacity-50' : ''}
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <span>{product.name}</span>
+                                    {noStock && (
+                                      <span className="text-xs px-1.5 py-0.5 rounded bg-destructive/10 text-destructive">
+                                        No Stock
+                                      </span>
+                                    )}
+                                    {!noStock && (
+                                      <span className="text-xs text-muted-foreground">
+                                        (Stock: {stock})
+                                      </span>
+                                    )}
+                                  </div>
+                                </SelectItem>
+                              );
+                            })}
+                          </SelectContent>
+                        </Select>
+                        {line.productId && hasZeroStock(line.productId) && (
+                          <p className="text-xs text-destructive mt-1">
+                            ⚠️ No stock available
+                          </p>
+                        )}
+                      </div>
+                      <div className="col-span-4">
+                        <Label className="text-xs mb-1 block">Batch</Label>
+                        <Select
+                          value={line.batchId}
+                          onValueChange={(value) => updateLine(index, 'batchId', value)}
+                          disabled={!line.productId || hasZeroStock(line.productId)}
+                        >
+                          <SelectTrigger className="h-9">
+                            <SelectValue placeholder="Batch" />
+                          </SelectTrigger>
+                          <SelectContent className="bg-popover">
+                            {getAvailableBatches(line.productId).map((batch) => (
+                              <SelectItem key={batch.id} value={batch.id}>
+                                {batch.batch_number} ({batch.quantity})
                               </SelectItem>
-                            );
-                          })}
-                        </SelectContent>
-                      </Select>
-                      {/* Zero stock warning for selected product */}
-                      {line.productId && hasZeroStock(line.productId) && (
-                        <p className="text-xs text-destructive mt-1">
-                          ⚠️ No stock available. Add Opening Stock / Receive Stock first.
-                        </p>
-                      )}
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="col-span-2 flex items-end justify-center">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => removeLine(index)}
+                          className="h-9 w-9"
+                        >
+                          <Trash2 className="w-4 h-4 text-destructive" />
+                        </Button>
+                      </div>
                     </div>
-                    <div className="col-span-2">
-                      <Select
-                        value={line.batchId}
-                        onValueChange={(value) => updateLine(index, 'batchId', value)}
-                        disabled={!line.productId || hasZeroStock(line.productId)}
-                      >
-                        <SelectTrigger className="h-9">
-                          <SelectValue placeholder="Batch" />
-                        </SelectTrigger>
-                        <SelectContent className="bg-popover">
-                          {getAvailableBatches(line.productId).map((batch) => (
-                            <SelectItem key={batch.id} value={batch.id}>
-                              {batch.batch_number} ({batch.quantity})
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="col-span-2">
-                      <div className="flex flex-col gap-1">
+                    
+                    {/* Row 2: Quantities, Prices, Discount */}
+                    <div className="grid grid-cols-12 gap-2">
+                      <div className="col-span-2">
+                        <Label className="text-xs mb-1 block">Paid Qty</Label>
                         <Input
                           type="number"
-                          placeholder="Paid Qty"
+                          placeholder="1"
                           value={line.paidQuantity}
                           onChange={(e) => updateLine(index, 'paidQuantity', e.target.value)}
                           className="h-9"
                           min="1"
                         />
-                        <span className="text-xs text-muted-foreground pl-1">Paid</span>
                       </div>
-                    </div>
-                    <div className="col-span-2">
-                      <div className="flex flex-col gap-1">
+                      <div className="col-span-2">
+                        <Label className="text-xs mb-1 block">Free Qty</Label>
                         <div className="relative">
                           <Input
                             type="number"
                             placeholder="0"
                             value={line.freeQuantity}
                             onChange={(e) => updateLine(index, 'freeQuantity', e.target.value)}
-                            className="h-9 pr-12"
+                            className="h-9"
                             min="0"
                           />
                           {parseInt(line.freeQuantity) > 0 && (
-                            <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-medium text-green-600 dark:text-green-400 bg-green-100 dark:bg-green-900/30 px-1.5 py-0.5 rounded">
+                            <Badge variant="secondary" className="absolute -top-2 -right-2 text-[10px] px-1 py-0 bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
                               FREE
-                            </span>
+                            </Badge>
                           )}
                         </div>
-                        <span className="text-xs text-muted-foreground pl-1">Free</span>
                       </div>
-                    </div>
-                    <div className="col-span-2">
-                      <div className="flex flex-col gap-1">
+                      <div className="col-span-2">
+                        <Label className="text-xs mb-1 block">MRP (৳)</Label>
                         <Input
                           type="number"
                           step="0.01"
-                          placeholder="Price"
+                          placeholder="MRP"
                           value={line.unitPrice}
                           onChange={(e) => updateLine(index, 'unitPrice', e.target.value)}
                           className="h-9"
                         />
-                        <span className="text-xs text-muted-foreground pl-1">Unit Price</span>
                       </div>
-                    </div>
-                    <div className="col-span-1 flex items-start justify-center pt-1">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => removeLine(index)}
-                        className="h-9 w-9"
-                      >
-                        <Trash2 className="w-4 h-4 text-destructive" />
-                      </Button>
+                      <div className="col-span-2">
+                        <Label className="text-xs mb-1 block">TP Rate (৳)</Label>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          placeholder="TP"
+                          value={line.tpRate}
+                          onChange={(e) => updateLine(index, 'tpRate', e.target.value)}
+                          className="h-9"
+                        />
+                      </div>
+                      <div className="col-span-2">
+                        <Label className="text-xs mb-1 block">Discount</Label>
+                        <div className="flex gap-1">
+                          <Select
+                            value={line.discountType}
+                            onValueChange={(value: 'AMOUNT' | 'PERCENT') => updateLine(index, 'discountType', value)}
+                          >
+                            <SelectTrigger className="h-9 w-16">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent className="bg-popover">
+                              <SelectItem value="AMOUNT">৳</SelectItem>
+                              <SelectItem value="PERCENT">%</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            placeholder="0"
+                            value={line.discountValue}
+                            onChange={(e) => updateLine(index, 'discountValue', e.target.value)}
+                            className="h-9 flex-1"
+                            min="0"
+                          />
+                        </div>
+                      </div>
+                      <div className="col-span-2">
+                        <Label className="text-xs mb-1 block">Line Total</Label>
+                        <div className="h-9 flex items-center px-2 bg-muted rounded-md font-medium text-primary">
+                          {formatCurrency(calculateLineTotal(line))}
+                        </div>
+                      </div>
                     </div>
                   </div>
                   );
@@ -723,10 +822,43 @@ export default function Sales() {
                 )}
               </div>
 
+              {/* Overall Discount */}
+              {formData.lines.length > 0 && (
+                <div className="flex items-center gap-4 p-4 bg-muted/30 rounded-lg border border-dashed">
+                  <Label className="font-medium whitespace-nowrap">Overall Discount:</Label>
+                  <Select
+                    value={formData.overallDiscountType}
+                    onValueChange={(value: 'AMOUNT' | 'PERCENT') => setFormData({ ...formData, overallDiscountType: value })}
+                  >
+                    <SelectTrigger className="w-20">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-popover">
+                      <SelectItem value="AMOUNT">৳</SelectItem>
+                      <SelectItem value="PERCENT">%</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    placeholder="0"
+                    value={formData.overallDiscountValue}
+                    onChange={(e) => setFormData({ ...formData, overallDiscountValue: e.target.value })}
+                    className="w-32"
+                    min="0"
+                  />
+                </div>
+              )}
+
               {/* Total */}
               <div className="flex justify-end p-4 bg-muted/50 rounded-lg">
-                <div className="text-right">
-                  <p className="text-sm text-muted-foreground">Total Amount</p>
+                <div className="text-right space-y-1">
+                  <p className="text-sm text-muted-foreground">Subtotal: {formatCurrency(formData.lines.reduce((sum, line) => sum + calculateLineTotal(line), 0))}</p>
+                  {(parseFloat(formData.overallDiscountValue) || 0) > 0 && (
+                    <p className="text-sm text-amber-600 dark:text-amber-400">
+                      Overall Discount: -{formData.overallDiscountType === 'PERCENT' ? `${formData.overallDiscountValue}%` : formatCurrency(parseFloat(formData.overallDiscountValue) || 0)}
+                    </p>
+                  )}
                   <p className="text-2xl font-bold text-primary">{formatCurrency(calculateTotal())}</p>
                 </div>
               </div>

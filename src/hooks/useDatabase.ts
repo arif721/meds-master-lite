@@ -99,11 +99,14 @@ export type DbInvoiceLine = {
   product_id: string;
   batch_id: string | null;
   quantity: number;
-  unit_price: number;
+  unit_price: number; // MRP at time of sale
   total: number;
   returned_quantity: number;
   cost_price: number;
   free_quantity: number;
+  tp_rate: number; // TP Rate at time of sale
+  discount_type: 'AMOUNT' | 'PERCENT';
+  discount_value: number;
 };
 
 export type DbPayment = {
@@ -148,6 +151,10 @@ export type DbQuotationLine = {
   quantity: number;
   unit_price: number;
   total: number;
+  tp_rate: number;
+  mrp: number;
+  discount_type: 'AMOUNT' | 'PERCENT';
+  discount_value: number;
 };
 
 export type DbStockAdjustment = {

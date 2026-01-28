@@ -175,6 +175,8 @@ export type Database = {
         Row: {
           batch_id: string | null
           cost_price: number
+          discount_type: Database["public"]["Enums"]["discount_type"]
+          discount_value: number
           free_quantity: number
           id: string
           invoice_id: string
@@ -182,11 +184,14 @@ export type Database = {
           quantity: number
           returned_quantity: number
           total: number
+          tp_rate: number
           unit_price: number
         }
         Insert: {
           batch_id?: string | null
           cost_price?: number
+          discount_type?: Database["public"]["Enums"]["discount_type"]
+          discount_value?: number
           free_quantity?: number
           id?: string
           invoice_id: string
@@ -194,11 +199,14 @@ export type Database = {
           quantity?: number
           returned_quantity?: number
           total?: number
+          tp_rate?: number
           unit_price?: number
         }
         Update: {
           batch_id?: string | null
           cost_price?: number
+          discount_type?: Database["public"]["Enums"]["discount_type"]
+          discount_value?: number
           free_quantity?: number
           id?: string
           invoice_id?: string
@@ -206,6 +214,7 @@ export type Database = {
           quantity?: number
           returned_quantity?: number
           total?: number
+          tp_rate?: number
           unit_price?: number
         }
         Relationships: [
@@ -239,6 +248,7 @@ export type Database = {
           deleted_at: string | null
           deleted_by: string | null
           discount: number
+          discount_type: Database["public"]["Enums"]["discount_type"]
           due: number
           id: string
           invoice_number: string
@@ -257,6 +267,7 @@ export type Database = {
           deleted_at?: string | null
           deleted_by?: string | null
           discount?: number
+          discount_type?: Database["public"]["Enums"]["discount_type"]
           due?: number
           id?: string
           invoice_number: string
@@ -275,6 +286,7 @@ export type Database = {
           deleted_at?: string | null
           deleted_by?: string | null
           discount?: number
+          discount_type?: Database["public"]["Enums"]["discount_type"]
           due?: number
           id?: string
           invoice_number?: string
@@ -416,27 +428,39 @@ export type Database = {
       }
       quotation_lines: {
         Row: {
+          discount_type: Database["public"]["Enums"]["discount_type"]
+          discount_value: number
           id: string
+          mrp: number
           product_id: string
           quantity: number
           quotation_id: string
           total: number
+          tp_rate: number
           unit_price: number
         }
         Insert: {
+          discount_type?: Database["public"]["Enums"]["discount_type"]
+          discount_value?: number
           id?: string
+          mrp?: number
           product_id: string
           quantity?: number
           quotation_id: string
           total?: number
+          tp_rate?: number
           unit_price?: number
         }
         Update: {
+          discount_type?: Database["public"]["Enums"]["discount_type"]
+          discount_value?: number
           id?: string
+          mrp?: number
           product_id?: string
           quantity?: number
           quotation_id?: string
           total?: number
+          tp_rate?: number
           unit_price?: number
         }
         Relationships: [
@@ -461,6 +485,7 @@ export type Database = {
           created_at: string
           customer_id: string
           discount: number
+          discount_type: Database["public"]["Enums"]["discount_type"]
           id: string
           notes: string | null
           quotation_number: string
@@ -475,6 +500,7 @@ export type Database = {
           created_at?: string
           customer_id: string
           discount?: number
+          discount_type?: Database["public"]["Enums"]["discount_type"]
           id?: string
           notes?: string | null
           quotation_number: string
@@ -489,6 +515,7 @@ export type Database = {
           created_at?: string
           customer_id?: string
           discount?: number
+          discount_type?: Database["public"]["Enums"]["discount_type"]
           id?: string
           notes?: string | null
           quotation_number?: string
@@ -950,6 +977,7 @@ export type Database = {
         | "ADJUSTMENT"
         | "CATEGORY"
       commission_type: "PERCENTAGE" | "FIXED"
+      discount_type: "AMOUNT" | "PERCENT"
       invoice_status: "DRAFT" | "CONFIRMED" | "PAID" | "PARTIAL" | "CANCELLED"
       payment_method: "CASH" | "BANK" | "BKASH" | "NAGAD" | "CHECK" | "OTHER"
       payment_terms: "CASH" | "7_DAYS" | "15_DAYS" | "21_DAYS" | "30_DAYS"
@@ -1141,6 +1169,7 @@ export const Constants = {
         "CATEGORY",
       ],
       commission_type: ["PERCENTAGE", "FIXED"],
+      discount_type: ["AMOUNT", "PERCENT"],
       invoice_status: ["DRAFT", "CONFIRMED", "PAID", "PARTIAL", "CANCELLED"],
       payment_method: ["CASH", "BANK", "BKASH", "NAGAD", "CHECK", "OTHER"],
       payment_terms: ["CASH", "7_DAYS", "15_DAYS", "21_DAYS", "30_DAYS"],
