@@ -69,9 +69,12 @@ export default function Products() {
     category_id: '',
     unit: 'Piece' as DbProduct['unit'],
     sales_price: '', // MRP
-    cost_price: '', // TP Rate
+    tp_rate: '', // Trade Price (Buying)
+    cost_price: '', // Internal accounting cost
     sku: '',
   });
+  
+  const [priceError, setPriceError] = useState('');
 
   const handleAddCategory = async () => {
     if (!newCategoryName.trim()) return;
@@ -111,8 +114,30 @@ export default function Products() {
       .reduce((sum, b) => sum + b.quantity, 0);
   };
 
+  // Price validation
+  const validatePrices = (cost: string, tp: string, mrp: string) => {
+    const costPrice = parseFloat(cost) || 0;
+    const tpRate = parseFloat(tp) || 0;
+    const mrpPrice = parseFloat(mrp) || 0;
+    
+    if (costPrice > tpRate && tpRate > 0) {
+      return 'Cost Price must be ≤ TP Rate';
+    }
+    if (tpRate > mrpPrice && mrpPrice > 0) {
+      return 'TP Rate must be ≤ MRP';
+    }
+    return '';
+  };
+  
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validate price hierarchy
+    const error = validatePrices(formData.cost_price, formData.tp_rate, formData.sales_price);
+    if (error) {
+      setPriceError(error);
+      return;
+    }
     
     // Auto-generate SKU if not provided
     let sku = formData.sku;
@@ -127,6 +152,7 @@ export default function Products() {
       category_id: formData.category_id || null,
       unit: formData.unit,
       sales_price: parseFloat(formData.sales_price) || 0,
+      tp_rate: parseFloat(formData.tp_rate) || 0,
       cost_price: parseFloat(formData.cost_price) || 0,
       sku: sku || null,
       active: true,
@@ -149,9 +175,11 @@ export default function Products() {
       category_id: product.category_id || '',
       unit: product.unit,
       sales_price: product.sales_price.toString(),
+      tp_rate: product.tp_rate.toString(),
       cost_price: product.cost_price.toString(),
       sku: product.sku || '',
     });
+    setPriceError('');
     setDialogOpen(true);
   };
 
@@ -200,12 +228,14 @@ export default function Products() {
       category_id: '',
       unit: 'Piece' as DbProduct['unit'],
       sales_price: '',
+      tp_rate: '',
       cost_price: '',
       sku: '',
     });
     setEditingProduct(null);
     setNewCategoryName('');
     setShowAddCategory(false);
+    setPriceError('');
   };
 
   if (productsLoading) {
@@ -346,19 +376,46 @@ export default function Products() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              {/* Price Fields with Validation */}
+              {priceError && (
+                <div className="bg-destructive/10 border border-destructive/30 text-destructive rounded-md p-2 text-sm">
+                  ⚠ {priceError}
+                </div>
+              )}
+              
+              <div className="grid grid-cols-3 gap-3">
                 <div className="input-group">
-                  <Label htmlFor="cost_price">TP Rate (৳) *</Label>
+                  <Label htmlFor="cost_price">Cost Price (৳) *</Label>
                   <Input
                     id="cost_price"
                     type="number"
                     step="0.01"
                     value={formData.cost_price}
-                    onChange={(e) => setFormData({ ...formData, cost_price: e.target.value })}
+                    onChange={(e) => {
+                      setFormData({ ...formData, cost_price: e.target.value });
+                      setPriceError('');
+                    }}
                     placeholder="0.00"
                     required
                   />
-                  <p className="text-xs text-muted-foreground mt-1">Trade Price / Buying Rate</p>
+                  <p className="text-xs text-muted-foreground mt-1">Internal P&L</p>
+                </div>
+
+                <div className="input-group">
+                  <Label htmlFor="tp_rate">TP Rate (৳) *</Label>
+                  <Input
+                    id="tp_rate"
+                    type="number"
+                    step="0.01"
+                    value={formData.tp_rate}
+                    onChange={(e) => {
+                      setFormData({ ...formData, tp_rate: e.target.value });
+                      setPriceError('');
+                    }}
+                    placeholder="0.00"
+                    required
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">Trade/Buy Price</p>
                 </div>
 
                 <div className="input-group">
@@ -368,13 +425,20 @@ export default function Products() {
                     type="number"
                     step="0.01"
                     value={formData.sales_price}
-                    onChange={(e) => setFormData({ ...formData, sales_price: e.target.value })}
+                    onChange={(e) => {
+                      setFormData({ ...formData, sales_price: e.target.value });
+                      setPriceError('');
+                    }}
                     placeholder="0.00"
                     required
                   />
-                  <p className="text-xs text-muted-foreground mt-1">Maximum Retail Price</p>
+                  <p className="text-xs text-muted-foreground mt-1">Retail Price</p>
                 </div>
               </div>
+              
+              <p className="text-xs text-muted-foreground bg-muted/50 p-2 rounded">
+                📌 Rule: Cost Price ≤ TP Rate ≤ MRP
+              </p>
 
               <div className="input-group">
                 <Label htmlFor="sku">SKU {!editingProduct && <span className="text-xs text-muted-foreground">(Auto-generated if empty)</span>}</Label>
@@ -486,9 +550,16 @@ export default function Products() {
           { key: 'unit', header: 'Unit' },
           {
             key: 'cost_price',
+            header: 'Cost',
+            render: (product) => (
+              <span className="text-muted-foreground text-xs">{formatCurrency(Number(product.cost_price))}</span>
+            ),
+          },
+          {
+            key: 'tp_rate',
             header: 'TP Rate',
             render: (product) => (
-              <span className="text-muted-foreground">{formatCurrency(Number(product.cost_price))}</span>
+              <span className="text-muted-foreground">{formatCurrency(Number(product.tp_rate))}</span>
             ),
           },
           {

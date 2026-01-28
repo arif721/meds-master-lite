@@ -383,6 +383,7 @@ export type Database = {
           name: string
           sales_price: number
           sku: string | null
+          tp_rate: number
           unit: Database["public"]["Enums"]["product_unit"]
           updated_at: string
         }
@@ -398,6 +399,7 @@ export type Database = {
           name: string
           sales_price?: number
           sku?: string | null
+          tp_rate?: number
           unit?: Database["public"]["Enums"]["product_unit"]
           updated_at?: string
         }
@@ -413,6 +415,7 @@ export type Database = {
           name?: string
           sales_price?: number
           sku?: string | null
+          tp_rate?: number
           unit?: Database["public"]["Enums"]["product_unit"]
           updated_at?: string
         }
