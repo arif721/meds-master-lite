@@ -754,12 +754,6 @@ export function generateInvoiceHTML(data: InvoiceData): string {
               <span class="payment-label">Paid Amount</span>
               <span class="payment-value currency">৳${invoice.paidAmount.toLocaleString('en-BD', { minimumFractionDigits: 2 })}</span>
             </div>
-            ${showCostProfit ? `
-            <div class="payment-row profit-row">
-              <span class="payment-label">Total Profit</span>
-              <span class="payment-value currency ${totalProfit >= 0 ? 'text-profit' : 'text-loss'}">৳${totalProfit.toLocaleString('en-BD', { minimumFractionDigits: 2 })}</span>
-            </div>
-            ` : ''}
           </div>
           <div class="totals-box">
             <div class="totals-row">
