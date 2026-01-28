@@ -7,7 +7,7 @@ import { useCustomers, useSellers, useInvoices, useInvoiceLines, useAddInvoice, 
 import { useStores, PAYMENT_TERMS_LABELS, DbStore } from '@/hooks/useStores';
 import { formatCurrency, formatDate, formatDateOnly, formatTimeWithSeconds, isExpired, generateInvoiceNumber } from '@/lib/format';
 import { AdminGreetingClock } from '@/components/AdminGreetingClock';
-import { openInvoiceWindow } from '@/lib/invoice';
+import { openInvoiceWindow, openCustomerCopyWindow, openOfficeCopyWindow } from '@/lib/invoice';
 import {
   Dialog,
   DialogContent,
@@ -202,7 +202,7 @@ export default function Sales() {
       const product = dbProducts.find((p) => p.id === value);
       if (product) {
         newLines[index].unitPrice = product.sales_price.toString(); // MRP
-        newLines[index].tpRate = product.cost_price.toString(); // TP Rate
+        newLines[index].tpRate = (product.tp_rate || product.cost_price).toString(); // TP Rate (fallback to cost_price if tp_rate not set)
         newLines[index].batchId = '';
       }
     }
@@ -210,11 +210,11 @@ export default function Sales() {
     setFormData({ ...formData, lines: newLines });
   };
 
-  // Calculate line total with discount
+  // Calculate line total with discount (based on TP Rate, not MRP)
   const calculateLineTotal = (line: typeof formData.lines[0]) => {
     const paidQty = parseInt(line.paidQuantity) || 0;
-    const mrp = parseFloat(line.unitPrice) || 0;
-    const subtotal = paidQty * mrp;
+    const tpRate = parseFloat(line.tpRate) || 0; // Use TP Rate for billing
+    const subtotal = paidQty * tpRate;
     const discountValue = parseFloat(line.discountValue) || 0;
     
     if (line.discountType === 'PERCENT') {
@@ -343,15 +343,19 @@ export default function Sales() {
       const discountValue = parseFloat(line.discountValue) || 0;
       const lineTotal = calculateLineTotal(line);
       
+      // Get product's internal cost price for P&L calculation
+      const product = dbProducts.find(p => p.id === line.productId);
+      const costPrice = product?.cost_price || 0; // Internal accounting cost
+      
       return {
         product_id: line.productId,
         batch_id: line.batchId,
         quantity: paidQty,
         free_quantity: freeQty,
-        unit_price: unitPrice, // MRP
-        total: lineTotal,
-        cost_price: tpRate, // Legacy field
-        tp_rate: tpRate,
+        unit_price: unitPrice, // MRP (for reference only)
+        total: lineTotal, // Based on TP Rate
+        cost_price: costPrice, // Internal cost for P&L
+        tp_rate: tpRate, // Trade Price (billing price)
         discount_type: line.discountType,
         discount_value: discountValue,
         returned_quantity: 0,
@@ -458,11 +462,13 @@ export default function Sales() {
     return stores.find((s) => s.id === storeId)?.name || 'N/A';
   };
 
-  const printInvoice = (invoice: InvoiceWithLines) => {
+  // Prepare invoice data for printing
+  const getInvoicePrintData = (invoice: InvoiceWithLines) => {
     const customer = customers.find((c) => c.id === invoice.customer_id);
     const seller = invoice.seller_id ? dbSellers.find((s) => s.id === invoice.seller_id) : null;
+    const store = invoice.store_id ? stores.find((s) => s.id === invoice.store_id) : null;
     
-    // Transform to the expected format for openInvoiceWindow
+    // Transform to the expected format for invoice printing
     const invoiceForPrint = {
       id: invoice.id,
       invoiceNumber: invoice.invoice_number,
@@ -481,20 +487,54 @@ export default function Sales() {
         batchLotId: line.batch_id || '',
         quantity: line.quantity,
         freeQuantity: line.free_quantity,
-        unitPrice: line.unit_price,
+        unitPrice: line.unit_price, // MRP
         lineTotal: line.total,
       })),
       createdAt: new Date(invoice.created_at),
     };
     
-    openInvoiceWindow({
+    // Enhanced line data with TP Rate and Cost Price
+    const enhancedLines = invoice.lines.map(line => {
+      const product = dbProducts.find(p => p.id === line.product_id);
+      return {
+        id: line.id,
+        productName: product?.name || 'Unknown',
+        quantity: line.quantity,
+        freeQuantity: line.free_quantity,
+        unitPrice: line.unit_price, // MRP
+        tpRate: line.tp_rate || product?.tp_rate || 0, // TP Rate from line or product
+        costPrice: line.cost_price || product?.cost_price || 0, // Cost Price for P&L
+        discountType: line.discount_type as 'AMOUNT' | 'PERCENT',
+        discountValue: line.discount_value,
+        lineTotal: line.total,
+      };
+    });
+    
+    return {
       invoice: invoiceForPrint,
       customerName: customer?.name || 'N/A',
       customerAddress: customer?.address || undefined,
       customerPhone: customer?.phone || undefined,
       sellerName: seller?.name,
+      storeName: store?.name,
       getProductName,
-    });
+      lines: enhancedLines,
+    };
+  };
+
+  const printCustomerCopy = (invoice: InvoiceWithLines) => {
+    const data = getInvoicePrintData(invoice);
+    openCustomerCopyWindow(data);
+  };
+
+  const printOfficeCopy = (invoice: InvoiceWithLines) => {
+    const data = getInvoicePrintData(invoice);
+    openOfficeCopyWindow(data);
+  };
+
+  const printInvoice = (invoice: InvoiceWithLines) => {
+    // Default to customer copy
+    printCustomerCopy(invoice);
   };
 
   // Export functions
@@ -1040,43 +1080,54 @@ export default function Sales() {
                   <thead className="bg-muted">
                     <tr>
                       <th className="px-3 py-2 text-left">Product</th>
-                      <th className="px-3 py-2 text-right">Paid</th>
+                      <th className="px-3 py-2 text-right">MRP</th>
+                      <th className="px-3 py-2 text-right">TP Rate</th>
+                      <th className="px-3 py-2 text-right">Qty</th>
                       <th className="px-3 py-2 text-right">Free</th>
-                      <th className="px-3 py-2 text-right">Price</th>
                       <th className="px-3 py-2 text-right">Total</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {viewInvoice.lines.map((line) => (
-                      <tr key={line.id} className="border-t">
-                        <td className="px-3 py-2">{getProductName(line.product_id)}</td>
-                        <td className="px-3 py-2 text-right">{line.quantity}</td>
-                        <td className="px-3 py-2 text-right">
-                          {line.free_quantity > 0 ? (
-                            <span className="inline-flex items-center gap-1 text-green-600 dark:text-green-400">
-                              {line.free_quantity}
-                              <span className="text-xs bg-green-100 dark:bg-green-900/30 px-1 rounded">FREE</span>
-                            </span>
-                          ) : '-'}
-                        </td>
-                        <td className="px-3 py-2 text-right">{formatCurrency(line.unit_price)}</td>
-                        <td className="px-3 py-2 text-right">{formatCurrency(line.total)}</td>
-                      </tr>
-                    ))}
+                    {viewInvoice.lines.map((line) => {
+                      const product = dbProducts.find(p => p.id === line.product_id);
+                      return (
+                        <tr key={line.id} className="border-t">
+                          <td className="px-3 py-2">{getProductName(line.product_id)}</td>
+                          <td className="px-3 py-2 text-right text-muted-foreground">{formatCurrency(line.unit_price)}</td>
+                          <td className="px-3 py-2 text-right font-medium">{formatCurrency(line.tp_rate || product?.tp_rate || 0)}</td>
+                          <td className="px-3 py-2 text-right">{line.quantity}</td>
+                          <td className="px-3 py-2 text-right">
+                            {line.free_quantity > 0 ? (
+                              <span className="inline-flex items-center gap-1 text-green-600 dark:text-green-400">
+                                {line.free_quantity}
+                                <span className="text-xs bg-green-100 dark:bg-green-900/30 px-1 rounded">FREE</span>
+                              </span>
+                            ) : '-'}
+                          </td>
+                          <td className="px-3 py-2 text-right font-medium">{formatCurrency(line.total)}</td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
 
               <div className="space-y-1 text-right">
-                <p>Total: <span className="font-medium">{formatCurrency(viewInvoice.total)}</span></p>
+                <p className="text-sm text-muted-foreground">Subtotal (TP): <span className="font-medium text-foreground">{formatCurrency(viewInvoice.subtotal)}</span></p>
+                <p className="text-sm text-muted-foreground">Discount: <span className="font-medium text-orange-600">-{formatCurrency(viewInvoice.discount)}</span></p>
+                <p>Net Payable: <span className="font-medium">{formatCurrency(viewInvoice.total)}</span></p>
                 <p>Paid: <span className="font-medium text-success">{formatCurrency(viewInvoice.paid)}</span></p>
                 <p className="text-lg">Due: <span className="font-bold text-primary">{formatCurrency(viewInvoice.due)}</span></p>
               </div>
 
               <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => printInvoice(viewInvoice)}>
+                <Button variant="outline" onClick={() => printCustomerCopy(viewInvoice)}>
                   <Printer className="w-4 h-4 mr-2" />
-                  Print
+                  Customer Copy
+                </Button>
+                <Button variant="secondary" onClick={() => printOfficeCopy(viewInvoice)}>
+                  <Printer className="w-4 h-4 mr-2" />
+                  Office Copy
                 </Button>
               </div>
             </div>
