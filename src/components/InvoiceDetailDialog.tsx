@@ -10,8 +10,9 @@ import {
 } from '@/components/ui/dialog';
 import { Separator } from '@/components/ui/separator';
 import { DataTable } from '@/components/DataTable';
-import { useInvoiceLines, useProducts, useCustomers, DbInvoice } from '@/hooks/useDatabase';
+import { useInvoiceLines, useProducts, useCustomers, useSellers, DbInvoice } from '@/hooks/useDatabase';
 import { useStores } from '@/hooks/useStores';
+import { useSignatures, DbSignature } from '@/hooks/useSignatures';
 import { formatCurrency, formatDateOnly, formatTimeWithSeconds } from '@/lib/format';
 import { openInvoiceWindow } from '@/lib/invoice';
 
@@ -26,13 +27,35 @@ export function InvoiceDetailDialog({ invoice, open, onOpenChange }: InvoiceDeta
   const { data: allInvoiceLines = [] } = useInvoiceLines();
   const { data: products = [] } = useProducts();
   const { data: customers = [] } = useCustomers();
+  const { data: sellers = [] } = useSellers();
   const { data: stores = [] } = useStores();
+  const { data: signatures = [] } = useSignatures();
 
   if (!invoice) return null;
 
   const invoiceLines = allInvoiceLines.filter(line => line.invoice_id === invoice.id);
   const customer = customers.find(c => c.id === invoice.customer_id);
+  const seller = sellers.find(s => s.id === invoice.seller_id);
   const store = stores.find(s => s.id === invoice.store_id);
+
+  // Find signatures for this seller
+  const getDefaultSignature = (sellerId: string | null, signatureType: 'prepared_by' | 'representative'): string | undefined => {
+    // First try seller-specific default
+    if (sellerId) {
+      const sellerDefault = signatures.find(
+        (s: DbSignature) => s.seller_id === sellerId && s.signature_type === signatureType && s.is_default
+      );
+      if (sellerDefault) return sellerDefault.image_url;
+    }
+    // Fallback to global default
+    const globalDefault = signatures.find(
+      (s: DbSignature) => !s.seller_id && s.signature_type === signatureType && s.is_default
+    );
+    return globalDefault?.image_url;
+  };
+
+  const preparedBySignatureUrl = getDefaultSignature(invoice.seller_id, 'prepared_by');
+  const representativeSignatureUrl = getDefaultSignature(invoice.seller_id, 'representative');
 
   const enrichedLines = invoiceLines.map(line => {
     const product = products.find(p => p.id === line.product_id);
@@ -88,6 +111,9 @@ export function InvoiceDetailDialog({ invoice, open, onOpenChange }: InvoiceDeta
       customerName: customer?.name || 'Unknown',
       customerAddress: customer?.address || undefined,
       customerPhone: customer?.phone || undefined,
+      sellerName: seller?.name,
+      sellerDesignation: seller?.designation || undefined,
+      sellerPhone: seller?.phone || undefined,
       storeName: store?.name,
       getProductName: (productId: string) => {
         const product = products.find(p => p.id === productId);
@@ -97,6 +123,8 @@ export function InvoiceDetailDialog({ invoice, open, onOpenChange }: InvoiceDeta
       showTPRate: true,
       showCostProfit: copyType === 'OFFICE',
       copyType,
+      preparedBySignatureUrl,
+      representativeSignatureUrl,
     });
   };
 
