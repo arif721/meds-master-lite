@@ -1021,11 +1021,14 @@ export default function Sales() {
             header: 'Actions',
             render: (inv) => (
               <div className="flex items-center gap-1">
-                <Button variant="ghost" size="icon" onClick={() => setViewInvoice(inv)}>
+                <Button variant="ghost" size="icon" onClick={() => setViewInvoice(inv)} title="View Details">
                   <Eye className="w-4 h-4" />
                 </Button>
-                <Button variant="ghost" size="icon" onClick={() => printInvoice(inv)}>
+                <Button variant="ghost" size="icon" onClick={() => printCustomerCopy(inv)} title="Print Customer Copy">
                   <Printer className="w-4 h-4" />
+                </Button>
+                <Button variant="ghost" size="icon" onClick={() => printOfficeCopy(inv)} title="Print Office Copy">
+                  <FileText className="w-4 h-4 text-muted-foreground" />
                 </Button>
                 {inv.status === 'DRAFT' && (
                   <Button 
@@ -1120,7 +1123,15 @@ export default function Sales() {
                 <p className="text-lg">Due: <span className="font-bold text-primary">{formatCurrency(viewInvoice.due)}</span></p>
               </div>
 
-              <div className="flex justify-end gap-2">
+              <div className="flex justify-end gap-2 flex-wrap">
+                {viewInvoice.due > 0 && viewInvoice.status !== 'DRAFT' && (
+                  <Button variant="default" onClick={() => {
+                    setViewInvoice(null);
+                    window.location.href = `/payments?invoice=${viewInvoice.invoice_number}`;
+                  }}>
+                    💰 Receive Payment
+                  </Button>
+                )}
                 <Button variant="outline" onClick={() => printCustomerCopy(viewInvoice)}>
                   <Printer className="w-4 h-4 mr-2" />
                   Customer Copy

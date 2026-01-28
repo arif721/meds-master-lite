@@ -40,6 +40,7 @@ export function useStores() {
       const { data, error } = await supabase
         .from('stores')
         .select('*')
+        .eq('is_deleted', false)
         .order('name');
       if (error) throw error;
       return data as DbStore[];
