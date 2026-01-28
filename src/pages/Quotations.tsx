@@ -1,12 +1,11 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Plus, Search, FileText, Eye, Trash2, ArrowRight, X, Download, Printer, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { DataTable } from '@/components/DataTable';
-import { useStore } from '@/store/useStore';
-import { useCustomers, useSellers } from '@/hooks/useDatabase';
-import { useStores } from '@/hooks/useStores';
-import { formatCurrency, formatDate, generateId } from '@/lib/format';
+import { useCustomers, useSellers, useProducts, DbSeller, useAddInvoice, useConfirmInvoice, useBatches } from '@/hooks/useDatabase';
+import { useStores, PAYMENT_TERMS_LABELS, DbStore } from '@/hooks/useStores';
+import { formatCurrency, formatDate, generateId, formatDateOnly, isExpired, generateInvoiceNumber } from '@/lib/format';
 import { openQuotationWindow } from '@/lib/quotation';
 import {
   Dialog,
@@ -23,36 +22,134 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
-import { QuotationLine, Quotation } from '@/types';
 import { toast } from '@/hooks/use-toast';
 import { useNavigate } from 'react-router-dom';
+import { Badge } from '@/components/ui/badge';
+import { supabase } from '@/integrations/supabase/client';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+
+// Database types for quotations
+type DbQuotation = {
+  id: string;
+  quotation_number: string;
+  customer_id: string;
+  seller_id: string | null;
+  store_id: string | null;
+  status: 'DRAFT' | 'SENT' | 'ACCEPTED' | 'REJECTED' | 'EXPIRED' | 'CONVERTED';
+  subtotal: number;
+  discount: number;
+  discount_type: 'AMOUNT' | 'PERCENT';
+  total: number;
+  valid_until: string | null;
+  notes: string | null;
+  created_at: string;
+};
+
+type DbQuotationLine = {
+  id: string;
+  quotation_id: string;
+  product_id: string;
+  quantity: number;
+  mrp: number;
+  tp_rate: number;
+  unit_price: number;
+  discount_type: 'AMOUNT' | 'PERCENT';
+  discount_value: number;
+  total: number;
+};
+
+// Hooks for quotations
+function useQuotations() {
+  return useQuery({
+    queryKey: ['quotations'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('quotations')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return data as DbQuotation[];
+    },
+  });
+}
+
+function useQuotationLines() {
+  return useQuery({
+    queryKey: ['quotation_lines'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('quotation_lines')
+        .select('*');
+      if (error) throw error;
+      return data as DbQuotationLine[];
+    },
+  });
+}
+
+function generateQuotationNumber() {
+  const date = new Date();
+  const y = date.getFullYear().toString().slice(-2);
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  const rand = Math.floor(1000 + Math.random() * 9000);
+  return `QT-${y}${m}${d}-${rand}`;
+}
 
 export default function Quotations() {
   const navigate = useNavigate();
-  const { products, quotations, addQuotation, convertQuotationToInvoice, cancelQuotation } = useStore();
+  const queryClient = useQueryClient();
+  
+  // Database hooks
+  const { data: dbProducts = [], isLoading: productsLoading } = useProducts();
   const { data: customers = [], isLoading: customersLoading } = useCustomers();
   const { data: sellers = [] } = useSellers();
   const { data: stores = [] } = useStores();
+  const { data: dbBatches = [] } = useBatches();
+  const { data: quotations = [], isLoading: quotationsLoading } = useQuotations();
+  const { data: quotationLines = [] } = useQuotationLines();
+  
+  // Invoice mutations for conversion
+  const addInvoiceMutation = useAddInvoice();
+  const confirmInvoiceMutation = useConfirmInvoice();
+
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [viewQuotation, setViewQuotation] = useState<typeof quotations[0] | null>(null);
+  const [viewQuotation, setViewQuotation] = useState<(DbQuotation & { lines: DbQuotationLine[] }) | null>(null);
 
+  // Form state - advanced like Sales form
   const [formData, setFormData] = useState({
     customerId: '',
+    sellerId: '',
+    storeId: '',
     validDays: '7',
+    overallDiscountType: 'AMOUNT' as 'AMOUNT' | 'PERCENT',
+    overallDiscountValue: '',
     lines: [] as {
       productId: string;
       quantity: string;
-      unitPrice: string;
+      freeQuantity: string;
+      mrp: string;
+      tpRate: string;
+      discountType: 'AMOUNT' | 'PERCENT';
+      discountValue: string;
     }[],
   });
 
-  const activeProducts = products.filter((p) => p.active);
+  const activeProducts = dbProducts.filter((p) => p.active);
+  const activeSellers = sellers.filter((s: DbSeller) => s.active);
 
-  const filteredQuotations = quotations.filter(
+  // Combine quotations with their lines
+  const quotationsWithLines = useMemo(() => {
+    return quotations.map(q => ({
+      ...q,
+      lines: quotationLines.filter(line => line.quotation_id === q.id)
+    }));
+  }, [quotations, quotationLines]);
+
+  const filteredQuotations = quotationsWithLines.filter(
     (q) =>
-      q.quotationNumber.toLowerCase().includes(search.toLowerCase()) ||
-      customers.find((c) => c.id === q.customerId)?.name.toLowerCase().includes(search.toLowerCase())
+      q.quotation_number.toLowerCase().includes(search.toLowerCase()) ||
+      customers.find((c) => c.id === q.customer_id)?.name.toLowerCase().includes(search.toLowerCase())
   );
 
   const getCustomerName = (customerId: string) => {
@@ -60,58 +157,79 @@ export default function Quotations() {
   };
 
   const getProductName = (productId: string) => {
-    return products.find((p) => p.id === productId)?.name || 'Unknown';
+    return dbProducts.find((p) => p.id === productId)?.name || 'Unknown';
   };
 
-  const printQuotation = (quotation: Quotation) => {
-    const customer = customers.find((c) => c.id === quotation.customerId);
+  const getSellerName = (sellerId: string | null) => {
+    if (!sellerId) return 'N/A';
+    return sellers.find((s) => s.id === sellerId)?.name || 'N/A';
+  };
+
+  const getStoreName = (storeId: string | null) => {
+    if (!storeId) return 'N/A';
+    return stores.find((s) => s.id === storeId)?.name || 'N/A';
+  };
+
+  // Get available batches (with stock > 0 and not expired)
+  const getAvailableBatches = (productId: string) => {
+    return dbBatches.filter(
+      (b) => b.product_id === productId && b.quantity > 0 && (!b.expiry_date || !isExpired(new Date(b.expiry_date)))
+    ).sort((a, b) => {
+      if (!a.expiry_date && !b.expiry_date) return 0;
+      if (!a.expiry_date) return 1;
+      if (!b.expiry_date) return -1;
+      return new Date(a.expiry_date).getTime() - new Date(b.expiry_date).getTime();
+    });
+  };
+
+  const printQuotation = (quotation: DbQuotation & { lines: DbQuotationLine[] }) => {
+    const customer = customers.find((c) => c.id === quotation.customer_id);
+    const seller = quotation.seller_id ? sellers.find((s) => s.id === quotation.seller_id) : null;
+    const store = quotation.store_id ? stores.find((s) => s.id === quotation.store_id) : null;
     
-    // Build line data with TP Rate, MRP, etc.
     const lineData = quotation.lines.map(line => {
-      const product = products.find(p => p.id === line.productId);
-      // Use salesPrice as both MRP and TP Rate since local Product type doesn't have tp_rate
-      const mrp = product?.salesPrice || line.unitPrice;
-      const tpRate = product?.costPrice || line.unitPrice; // Use costPrice as TP approximation
+      const product = dbProducts.find(p => p.id === line.product_id);
       return {
         id: line.id,
         productName: product?.name || 'Unknown',
         quantity: line.quantity,
-        freeQuantity: 0, // Quotations don't have free qty by default
-        unitPrice: mrp, // MRP
-        tpRate: tpRate, // TP Rate
-        discountType: 'AMOUNT' as const,
-        discountValue: 0,
-        lineTotal: line.lineTotal,
+        freeQuantity: 0,
+        unitPrice: line.mrp,
+        tpRate: line.tp_rate,
+        discountType: line.discount_type,
+        discountValue: line.discount_value,
+        lineTotal: line.total,
       };
     });
 
     openQuotationWindow({
-      quotationNumber: quotation.quotationNumber,
-      date: new Date(quotation.date),
-      validUntil: new Date(quotation.validUntil),
+      quotationNumber: quotation.quotation_number,
+      date: new Date(quotation.created_at),
+      validUntil: quotation.valid_until ? new Date(quotation.valid_until) : new Date(),
       status: quotation.status,
       customerName: customer?.name || 'Unknown',
       customerAddress: customer?.address || undefined,
       customerPhone: customer?.phone || undefined,
-      sellerName: undefined,
-      storeName: undefined,
+      sellerName: seller?.name,
+      storeName: store?.name,
       lines: lineData,
-      subtotal: quotation.totalAmount,
-      discount: 0,
-      discountType: 'AMOUNT',
-      total: quotation.totalAmount,
+      subtotal: quotation.subtotal,
+      discount: quotation.discount,
+      discountType: quotation.discount_type,
+      total: quotation.total,
     });
   };
 
   const exportToCSV = () => {
-    const headers = ['Quotation #', 'Date', 'Valid Until', 'Customer', 'Products', 'Total Amount', 'Status'];
+    const headers = ['Quotation #', 'Date', 'Valid Until', 'Customer', 'Store', 'Seller', 'Total Amount', 'Status'];
     const rows = filteredQuotations.map((q) => [
-      q.quotationNumber,
-      formatDate(q.date),
-      formatDate(q.validUntil),
-      getCustomerName(q.customerId),
-      q.lines.map(l => getProductName(l.productId)).join('; '),
-      q.totalAmount.toFixed(2),
+      q.quotation_number,
+      formatDate(q.created_at),
+      q.valid_until ? formatDate(q.valid_until) : 'N/A',
+      getCustomerName(q.customer_id),
+      getStoreName(q.store_id),
+      getSellerName(q.seller_id),
+      q.total.toFixed(2),
       q.status,
     ]);
 
@@ -141,7 +259,15 @@ export default function Quotations() {
       ...formData,
       lines: [
         ...formData.lines,
-        { productId: '', quantity: '', unitPrice: '' },
+        { 
+          productId: '', 
+          quantity: '', 
+          freeQuantity: '0',
+          mrp: '', 
+          tpRate: '',
+          discountType: 'AMOUNT' as const,
+          discountValue: '0',
+        },
       ],
     });
   };
@@ -157,33 +283,64 @@ export default function Quotations() {
     const newLines = [...formData.lines];
     newLines[index] = { ...newLines[index], [field]: value };
 
-    // Auto-set unit price when product is selected
+    // Auto-set MRP and TP Rate when product is selected
     if (field === 'productId') {
-      const product = products.find((p) => p.id === value);
+      const product = dbProducts.find((p) => p.id === value);
       if (product) {
-        newLines[index].unitPrice = product.salesPrice.toString();
+        newLines[index].mrp = product.sales_price.toString();
+        newLines[index].tpRate = (product.tp_rate || product.cost_price).toString();
       }
     }
 
     setFormData({ ...formData, lines: newLines });
   };
 
-  const calculateTotal = () => {
-    return formData.lines.reduce((sum, line) => {
-      const qty = parseInt(line.quantity) || 0;
-      const price = parseFloat(line.unitPrice) || 0;
-      return sum + qty * price;
-    }, 0);
+  // Calculate line total with discount (based on TP Rate)
+  const calculateLineTotal = (line: typeof formData.lines[0]) => {
+    const qty = parseInt(line.quantity) || 0;
+    const tpRate = parseFloat(line.tpRate) || 0;
+    const subtotal = qty * tpRate;
+    const discountValue = parseFloat(line.discountValue) || 0;
+    
+    if (line.discountType === 'PERCENT') {
+      return subtotal - (subtotal * discountValue / 100);
+    }
+    return subtotal - discountValue;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const calculateSubtotal = () => {
+    return formData.lines.reduce((sum, line) => sum + calculateLineTotal(line), 0);
+  };
+
+  const calculateTotal = () => {
+    let subtotal = calculateSubtotal();
+    const overallDiscount = parseFloat(formData.overallDiscountValue) || 0;
+    
+    if (formData.overallDiscountType === 'PERCENT') {
+      subtotal = subtotal - (subtotal * overallDiscount / 100);
+    } else {
+      subtotal = subtotal - overallDiscount;
+    }
+    
+    return Math.max(0, subtotal);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Validate customer is selected
     if (!formData.customerId) {
       toast({
         title: 'Customer Required',
         description: 'Please select a customer',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (!formData.storeId) {
+      toast({
+        title: 'Store Required',
+        description: 'Please select a store',
         variant: 'destructive',
       });
       return;
@@ -198,7 +355,6 @@ export default function Quotations() {
       return;
     }
 
-    // Validate each line has product and quantity >= 1
     for (const line of formData.lines) {
       if (!line.productId) {
         toast({
@@ -223,70 +379,220 @@ export default function Quotations() {
     const validUntil = new Date();
     validUntil.setDate(validUntil.getDate() + validDays);
 
-    const quotationLines: QuotationLine[] = formData.lines.map((line) => ({
-      id: generateId(),
-      quotationId: '',
-      productId: line.productId,
-      quantity: parseInt(line.quantity) || 0,
-      unitPrice: parseFloat(line.unitPrice) || 0,
-      lineTotal: (parseInt(line.quantity) || 0) * (parseFloat(line.unitPrice) || 0),
-    }));
+    const quotationNumber = generateQuotationNumber();
+    const subtotal = calculateSubtotal();
+    const overallDiscountValue = parseFloat(formData.overallDiscountValue) || 0;
+    let overallDiscountAmount = 0;
+    if (formData.overallDiscountType === 'PERCENT') {
+      overallDiscountAmount = subtotal * overallDiscountValue / 100;
+    } else {
+      overallDiscountAmount = overallDiscountValue;
+    }
 
-    addQuotation({
-      date: new Date(),
-      validUntil,
-      customerId: formData.customerId,
-      totalAmount: calculateTotal(),
-      status: 'PENDING',
-      lines: quotationLines,
-    });
+    try {
+      // Create quotation
+      const { data: newQuotation, error: quotationError } = await supabase
+        .from('quotations')
+        .insert({
+          quotation_number: quotationNumber,
+          customer_id: formData.customerId,
+          seller_id: formData.sellerId || null,
+          store_id: formData.storeId,
+          status: 'DRAFT',
+          subtotal: subtotal,
+          discount: overallDiscountAmount,
+          discount_type: formData.overallDiscountType,
+          total: calculateTotal(),
+          valid_until: validUntil.toISOString().split('T')[0],
+          notes: null,
+        })
+        .select()
+        .single();
 
-    toast({
-      title: 'Quotation Created',
-      description: 'Quotation has been created successfully',
-    });
+      if (quotationError) throw quotationError;
 
-    resetForm();
-    setDialogOpen(false);
-  };
+      // Create quotation lines
+      const lines = formData.lines.map(line => ({
+        quotation_id: newQuotation.id,
+        product_id: line.productId,
+        quantity: parseInt(line.quantity) || 0,
+        mrp: parseFloat(line.mrp) || 0,
+        tp_rate: parseFloat(line.tpRate) || 0,
+        unit_price: parseFloat(line.tpRate) || 0,
+        discount_type: line.discountType,
+        discount_value: parseFloat(line.discountValue) || 0,
+        total: calculateLineTotal(line),
+      }));
 
-  const handleConvert = (quotationId: string) => {
-    const invoiceId = convertQuotationToInvoice(quotationId);
-    if (invoiceId) {
+      const { error: linesError } = await supabase
+        .from('quotation_lines')
+        .insert(lines);
+
+      if (linesError) throw linesError;
+
       toast({
-        title: 'Converted to Invoice',
-        description: 'Quotation has been converted to a draft invoice. Please select batches and confirm.',
+        title: 'Quotation Created',
+        description: `Quotation ${quotationNumber} has been created successfully`,
       });
-      navigate('/sales');
+
+      queryClient.invalidateQueries({ queryKey: ['quotations'] });
+      queryClient.invalidateQueries({ queryKey: ['quotation_lines'] });
+
+      resetForm();
+      setDialogOpen(false);
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to create quotation',
+        variant: 'destructive',
+      });
     }
   };
 
-  const handleCancel = (quotationId: string) => {
-    if (confirm('Are you sure you want to cancel this quotation?')) {
-      cancelQuotation(quotationId);
-      toast({
-        title: 'Quotation Cancelled',
-        description: 'Quotation has been cancelled',
+  const handleConvert = async (quotation: DbQuotation & { lines: DbQuotationLine[] }) => {
+    // Check stock availability for conversion
+    for (const line of quotation.lines) {
+      const availableBatches = getAvailableBatches(line.product_id);
+      const totalAvailable = availableBatches.reduce((sum, b) => sum + b.quantity, 0);
+      
+      if (totalAvailable < line.quantity) {
+        toast({
+          title: 'Insufficient Stock',
+          description: `Not enough stock for ${getProductName(line.product_id)}. Available: ${totalAvailable}, Required: ${line.quantity}`,
+          variant: 'destructive',
+        });
+        return;
+      }
+    }
+
+    try {
+      const invoiceNumber = generateInvoiceNumber();
+      
+      // Prepare invoice lines with batch selection (FIFO)
+      const invoiceLines = quotation.lines.map(line => {
+        const availableBatches = getAvailableBatches(line.product_id);
+        const firstBatch = availableBatches[0];
+        const product = dbProducts.find(p => p.id === line.product_id);
+        
+        return {
+          product_id: line.product_id,
+          batch_id: firstBatch?.id || null,
+          quantity: line.quantity,
+          free_quantity: 0,
+          unit_price: line.mrp,
+          total: line.total,
+          cost_price: product?.cost_price || 0,
+          tp_rate: line.tp_rate,
+          discount_type: line.discount_type,
+          discount_value: line.discount_value,
+          returned_quantity: 0,
+        };
       });
+
+      // Create invoice
+      const createdInvoice = await addInvoiceMutation.mutateAsync({
+        invoice: {
+          invoice_number: invoiceNumber,
+          customer_id: quotation.customer_id,
+          seller_id: quotation.seller_id,
+          store_id: quotation.store_id,
+          status: 'DRAFT',
+          subtotal: quotation.subtotal,
+          discount: quotation.discount,
+          total: quotation.total,
+          paid: 0,
+          due: quotation.total,
+          notes: `Converted from ${quotation.quotation_number}`,
+        },
+        lines: invoiceLines,
+      });
+
+      // Update quotation status to CONVERTED
+      await supabase
+        .from('quotations')
+        .update({ status: 'CONVERTED' })
+        .eq('id', quotation.id);
+
+      queryClient.invalidateQueries({ queryKey: ['quotations'] });
+
+      toast({
+        title: 'Converted to Invoice',
+        description: `Quotation converted to Invoice ${invoiceNumber}. Please review and confirm to deduct stock.`,
+      });
+      
+      navigate('/sales');
+    } catch (error: any) {
+      toast({
+        title: 'Conversion Failed',
+        description: error.message || 'Failed to convert quotation to invoice',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleCancel = async (quotationId: string) => {
+    if (confirm('Are you sure you want to cancel this quotation?')) {
+      try {
+        await supabase
+          .from('quotations')
+          .update({ status: 'REJECTED' })
+          .eq('id', quotationId);
+
+        queryClient.invalidateQueries({ queryKey: ['quotations'] });
+
+        toast({
+          title: 'Quotation Cancelled',
+          description: 'Quotation has been cancelled',
+        });
+      } catch (error: any) {
+        toast({
+          title: 'Error',
+          description: error.message || 'Failed to cancel quotation',
+          variant: 'destructive',
+        });
+      }
     }
   };
 
   const resetForm = () => {
-    setFormData({ customerId: '', validDays: '7', lines: [] });
+    setFormData({ 
+      customerId: '', 
+      sellerId: '',
+      storeId: '',
+      validDays: '7', 
+      overallDiscountType: 'AMOUNT',
+      overallDiscountValue: '',
+      lines: [] 
+    });
   };
 
   const getStatusBadge = (status: string) => {
     switch (status) {
-      case 'PENDING':
-        return 'badge-info';
+      case 'DRAFT':
+        return 'secondary';
+      case 'SENT':
+        return 'outline';
+      case 'ACCEPTED':
+        return 'default';
       case 'CONVERTED':
-        return 'badge-success';
-      case 'CANCELLED':
-        return 'badge-danger';
+        return 'default';
+      case 'REJECTED':
+      case 'EXPIRED':
+        return 'destructive';
       default:
-        return 'badge-info';
+        return 'secondary';
     }
   };
+
+  const isLoading = productsLoading || customersLoading || quotationsLoading;
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -308,12 +614,13 @@ export default function Quotations() {
                 Create Quotation
               </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Create Quotation</DialogTitle>
               </DialogHeader>
               <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
+                {/* Customer, Store, Seller Row */}
+                <div className="grid grid-cols-3 gap-4">
                   <div className="input-group">
                     <Label>Customer *</Label>
                     <Select
@@ -334,28 +641,78 @@ export default function Quotations() {
                   </div>
 
                   <div className="input-group">
-                    <Label>Valid For (days)</Label>
-                    <Input
-                      type="number"
-                      value={formData.validDays}
-                      onChange={(e) => setFormData({ ...formData, validDays: e.target.value })}
-                      placeholder="7"
-                    />
+                    <Label>Store *</Label>
+                    <Select
+                      value={formData.storeId}
+                      onValueChange={(value) => setFormData({ ...formData, storeId: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select store" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-popover">
+                        {stores.filter((s: DbStore) => s.active).map((store: DbStore) => (
+                          <SelectItem key={store.id} value={store.id}>
+                            {store.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
+
+                  <div className="input-group">
+                    <Label>Seller (Optional)</Label>
+                    <Select
+                      value={formData.sellerId}
+                      onValueChange={(value) => setFormData({ ...formData, sellerId: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select seller" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-popover">
+                        {activeSellers.map((seller: DbSeller) => (
+                          <SelectItem key={seller.id} value={seller.id}>
+                            {seller.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="input-group max-w-xs">
+                  <Label>Valid For (days)</Label>
+                  <Input
+                    type="number"
+                    value={formData.validDays}
+                    onChange={(e) => setFormData({ ...formData, validDays: e.target.value })}
+                    placeholder="7"
+                  />
                 </div>
 
                 {/* Quotation Lines */}
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <Label>Products</Label>
+                    <Label className="text-base font-semibold">Products</Label>
                     <Button type="button" variant="outline" size="sm" onClick={addLine}>
                       <Plus className="w-4 h-4 mr-1" />
                       Add Line
                     </Button>
                   </div>
 
+                  {/* Header Row */}
+                  {formData.lines.length > 0 && (
+                    <div className="grid grid-cols-12 gap-2 px-3 text-xs font-medium text-muted-foreground">
+                      <div className="col-span-3">Product</div>
+                      <div className="col-span-1">Qty</div>
+                      <div className="col-span-1">Free</div>
+                      <div className="col-span-2">MRP</div>
+                      <div className="col-span-2">TP Rate</div>
+                      <div className="col-span-2">Discount</div>
+                      <div className="col-span-1"></div>
+                    </div>
+                  )}
+
                   {formData.lines.map((line, index) => {
-                    // Filter out already selected products (except current line)
                     const selectedProductIds = formData.lines
                       .filter((_, i) => i !== index)
                       .map((l) => l.productId)
@@ -365,55 +722,96 @@ export default function Quotations() {
                     );
 
                     return (
-                    <div key={index} className="grid grid-cols-12 gap-2 p-3 bg-muted/50 rounded-lg">
-                      <div className="col-span-5">
-                        <Select
-                          value={line.productId}
-                          onValueChange={(value) => updateLine(index, 'productId', value)}
-                        >
-                          <SelectTrigger className="h-9">
-                            <SelectValue placeholder="Product" />
-                          </SelectTrigger>
-                          <SelectContent className="bg-popover">
-                            {availableProducts.map((product) => (
-                              <SelectItem key={product.id} value={product.id}>
-                                {product.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                      <div key={index} className="grid grid-cols-12 gap-2 p-3 bg-muted/50 rounded-lg items-center">
+                        <div className="col-span-3">
+                          <Select
+                            value={line.productId}
+                            onValueChange={(value) => updateLine(index, 'productId', value)}
+                          >
+                            <SelectTrigger className="h-9">
+                              <SelectValue placeholder="Product" />
+                            </SelectTrigger>
+                            <SelectContent className="bg-popover">
+                              {availableProducts.map((product) => (
+                                <SelectItem key={product.id} value={product.id}>
+                                  {product.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="col-span-1">
+                          <Input
+                            type="number"
+                            placeholder="Qty"
+                            value={line.quantity}
+                            onChange={(e) => updateLine(index, 'quantity', e.target.value)}
+                            className="h-9"
+                          />
+                        </div>
+                        <div className="col-span-1">
+                          <Input
+                            type="number"
+                            placeholder="Free"
+                            value={line.freeQuantity}
+                            onChange={(e) => updateLine(index, 'freeQuantity', e.target.value)}
+                            className="h-9"
+                          />
+                        </div>
+                        <div className="col-span-2">
+                          <Input
+                            type="number"
+                            step="0.01"
+                            placeholder="MRP"
+                            value={line.mrp}
+                            onChange={(e) => updateLine(index, 'mrp', e.target.value)}
+                            className="h-9"
+                          />
+                        </div>
+                        <div className="col-span-2">
+                          <Input
+                            type="number"
+                            step="0.01"
+                            placeholder="TP Rate"
+                            value={line.tpRate}
+                            onChange={(e) => updateLine(index, 'tpRate', e.target.value)}
+                            className="h-9"
+                          />
+                        </div>
+                        <div className="col-span-2 flex gap-1">
+                          <Select
+                            value={line.discountType}
+                            onValueChange={(value) => updateLine(index, 'discountType', value)}
+                          >
+                            <SelectTrigger className="h-9 w-16">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent className="bg-popover">
+                              <SelectItem value="AMOUNT">৳</SelectItem>
+                              <SelectItem value="PERCENT">%</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            placeholder="0"
+                            value={line.discountValue}
+                            onChange={(e) => updateLine(index, 'discountValue', e.target.value)}
+                            className="h-9 flex-1"
+                          />
+                        </div>
+                        <div className="col-span-1 flex items-center justify-center">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => removeLine(index)}
+                            className="h-9 w-9"
+                          >
+                            <Trash2 className="w-4 h-4 text-destructive" />
+                          </Button>
+                        </div>
                       </div>
-                      <div className="col-span-3">
-                        <Input
-                          type="number"
-                          placeholder="Qty"
-                          value={line.quantity}
-                          onChange={(e) => updateLine(index, 'quantity', e.target.value)}
-                          className="h-9"
-                        />
-                      </div>
-                      <div className="col-span-3">
-                        <Input
-                          type="number"
-                          step="0.01"
-                          placeholder="Price"
-                          value={line.unitPrice}
-                          onChange={(e) => updateLine(index, 'unitPrice', e.target.value)}
-                          className="h-9"
-                        />
-                      </div>
-                      <div className="col-span-1 flex items-center justify-center">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => removeLine(index)}
-                          className="h-9 w-9"
-                        >
-                          <Trash2 className="w-4 h-4 text-destructive" />
-                        </Button>
-                      </div>
-                    </div>
                     );
                   })}
 
@@ -424,11 +822,48 @@ export default function Quotations() {
                   )}
                 </div>
 
-                {/* Total */}
+                {/* Overall Discount */}
+                <div className="flex items-center gap-4 p-4 bg-muted/30 rounded-lg">
+                  <Label className="whitespace-nowrap">Overall Discount:</Label>
+                  <Select
+                    value={formData.overallDiscountType}
+                    onValueChange={(value) => setFormData({ ...formData, overallDiscountType: value as 'AMOUNT' | 'PERCENT' })}
+                  >
+                    <SelectTrigger className="w-20">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-popover">
+                      <SelectItem value="AMOUNT">৳</SelectItem>
+                      <SelectItem value="PERCENT">%</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    placeholder="0"
+                    value={formData.overallDiscountValue}
+                    onChange={(e) => setFormData({ ...formData, overallDiscountValue: e.target.value })}
+                    className="w-32"
+                  />
+                </div>
+
+                {/* Totals */}
                 <div className="flex justify-end p-4 bg-muted/50 rounded-lg">
-                  <div className="text-right">
-                    <p className="text-sm text-muted-foreground">Total Amount</p>
-                    <p className="text-2xl font-bold text-primary">{formatCurrency(calculateTotal())}</p>
+                  <div className="text-right space-y-1">
+                    <div className="flex justify-between gap-8 text-sm">
+                      <span className="text-muted-foreground">Subtotal:</span>
+                      <span>{formatCurrency(calculateSubtotal())}</span>
+                    </div>
+                    {parseFloat(formData.overallDiscountValue) > 0 && (
+                      <div className="flex justify-between gap-8 text-sm text-destructive">
+                        <span>Discount:</span>
+                        <span>-{formatCurrency(calculateSubtotal() - calculateTotal())}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between gap-8 pt-2 border-t">
+                      <span className="font-medium">Total Amount:</span>
+                      <span className="text-2xl font-bold text-primary">{formatCurrency(calculateTotal())}</span>
+                    </div>
                   </div>
                 </div>
 
@@ -464,35 +899,40 @@ export default function Quotations() {
             render: (q) => (
               <div className="flex items-center gap-2">
                 <FileText className="w-4 h-4 text-muted-foreground" />
-                <span className="font-medium">{q.quotationNumber}</span>
+                <span className="font-medium">{q.quotation_number}</span>
               </div>
             ),
           },
           {
             key: 'date',
             header: 'Date',
-            render: (q) => formatDate(q.date),
+            render: (q) => formatDateOnly(q.created_at),
           },
           {
             key: 'validUntil',
             header: 'Valid Until',
-            render: (q) => formatDate(q.validUntil),
+            render: (q) => q.valid_until ? formatDateOnly(q.valid_until) : 'N/A',
           },
           {
             key: 'customer',
             header: 'Customer',
-            render: (q) => getCustomerName(q.customerId),
+            render: (q) => getCustomerName(q.customer_id),
+          },
+          {
+            key: 'store',
+            header: 'Store',
+            render: (q) => getStoreName(q.store_id),
           },
           {
             key: 'totalAmount',
             header: 'Total',
-            render: (q) => <span className="font-medium">{formatCurrency(q.totalAmount)}</span>,
+            render: (q) => <span className="font-medium">{formatCurrency(q.total)}</span>,
           },
           {
             key: 'status',
             header: 'Status',
             render: (q) => (
-              <span className={getStatusBadge(q.status)}>{q.status}</span>
+              <Badge variant={getStatusBadge(q.status)}>{q.status}</Badge>
             ),
           },
           {
@@ -506,9 +946,9 @@ export default function Quotations() {
                 <Button variant="ghost" size="icon" onClick={() => printQuotation(q)} title="Print">
                   <Printer className="w-4 h-4" />
                 </Button>
-                {q.status === 'PENDING' && (
+                {(q.status === 'DRAFT' || q.status === 'SENT' || q.status === 'ACCEPTED') && (
                   <>
-                    <Button variant="outline" size="sm" onClick={() => handleConvert(q.id)}>
+                    <Button variant="outline" size="sm" onClick={() => handleConvert(q)}>
                       <ArrowRight className="w-4 h-4 mr-1" />
                       To Invoice
                     </Button>
@@ -521,7 +961,7 @@ export default function Quotations() {
             ),
           },
         ]}
-        data={filteredQuotations.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())}
+        data={filteredQuotations.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())}
         keyExtractor={(q) => q.id}
         emptyMessage="No quotations found"
       />
@@ -530,18 +970,26 @@ export default function Quotations() {
       <Dialog open={!!viewQuotation} onOpenChange={() => setViewQuotation(null)}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>Quotation {viewQuotation?.quotationNumber}</DialogTitle>
+            <DialogTitle>Quotation {viewQuotation?.quotation_number}</DialogTitle>
           </DialogHeader>
           {viewQuotation && (
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
                   <p className="text-muted-foreground">Customer</p>
-                  <p className="font-medium">{getCustomerName(viewQuotation.customerId)}</p>
+                  <p className="font-medium">{getCustomerName(viewQuotation.customer_id)}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Store</p>
+                  <p className="font-medium">{getStoreName(viewQuotation.store_id)}</p>
                 </div>
                 <div>
                   <p className="text-muted-foreground">Valid Until</p>
-                  <p className="font-medium">{formatDate(viewQuotation.validUntil)}</p>
+                  <p className="font-medium">{viewQuotation.valid_until ? formatDate(viewQuotation.valid_until) : 'N/A'}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Status</p>
+                  <Badge variant={getStatusBadge(viewQuotation.status)}>{viewQuotation.status}</Badge>
                 </div>
               </div>
 
@@ -551,25 +999,31 @@ export default function Quotations() {
                     <tr>
                       <th className="px-3 py-2 text-left">Product</th>
                       <th className="px-3 py-2 text-right">Qty</th>
-                      <th className="px-3 py-2 text-right">Price</th>
+                      <th className="px-3 py-2 text-right">TP Rate</th>
+                      <th className="px-3 py-2 text-right">MRP</th>
                       <th className="px-3 py-2 text-right">Total</th>
                     </tr>
                   </thead>
                   <tbody>
                     {viewQuotation.lines.map((line) => (
                       <tr key={line.id} className="border-t">
-                        <td className="px-3 py-2">{getProductName(line.productId)}</td>
+                        <td className="px-3 py-2">{getProductName(line.product_id)}</td>
                         <td className="px-3 py-2 text-right">{line.quantity}</td>
-                        <td className="px-3 py-2 text-right">{formatCurrency(line.unitPrice)}</td>
-                        <td className="px-3 py-2 text-right">{formatCurrency(line.lineTotal)}</td>
+                        <td className="px-3 py-2 text-right">{formatCurrency(line.tp_rate)}</td>
+                        <td className="px-3 py-2 text-right text-muted-foreground">{formatCurrency(line.mrp)}</td>
+                        <td className="px-3 py-2 text-right font-medium">{formatCurrency(line.total)}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
 
-              <div className="text-right">
-                <p className="text-lg">Total: <span className="font-bold text-primary">{formatCurrency(viewQuotation.totalAmount)}</span></p>
+              <div className="space-y-1 text-right">
+                <p className="text-sm">Subtotal: <span className="font-medium">{formatCurrency(viewQuotation.subtotal)}</span></p>
+                {viewQuotation.discount > 0 && (
+                  <p className="text-sm text-destructive">Discount: -{formatCurrency(viewQuotation.discount)}</p>
+                )}
+                <p className="text-lg border-t pt-2">Total: <span className="font-bold text-primary">{formatCurrency(viewQuotation.total)}</span></p>
               </div>
             </div>
           )}

@@ -62,18 +62,23 @@ export default function StoreDetails() {
     }
   }, [datePreset, customDateRange]);
 
-  // Filter invoices for this store
+  // Filter invoices for this store (include all non-cancelled invoices)
   const storeInvoices = useMemo(() => {
-    return allInvoices.filter(inv => inv.store_id === storeId && inv.status !== 'DRAFT' && inv.status !== 'CANCELLED');
+    return allInvoices.filter(inv => inv.store_id === storeId && inv.status !== 'CANCELLED');
   }, [allInvoices, storeId]);
+  
+  // Confirmed invoices only (for calculations - exclude DRAFT)
+  const confirmedStoreInvoices = useMemo(() => {
+    return storeInvoices.filter(inv => inv.status !== 'DRAFT');
+  }, [storeInvoices]);
 
-  // Filter invoices by date range
+  // Filter confirmed invoices by date range (for calculations)
   const rangeInvoices = useMemo(() => {
-    return storeInvoices.filter((inv) => {
+    return confirmedStoreInvoices.filter((inv) => {
       const invoiceDate = parseISO(inv.created_at);
       return isWithinInterval(invoiceDate, { start: dateRange.start, end: dateRange.end });
     });
-  }, [storeInvoices, dateRange]);
+  }, [confirmedStoreInvoices, dateRange]);
 
   // Get invoice lines for range invoices
   const rangeInvoiceIds = useMemo(() => rangeInvoices.map(inv => inv.id), [rangeInvoices]);
@@ -174,9 +179,10 @@ export default function StoreDetails() {
   }, [storeInvoices, invoiceSearch, statusFilter]);
 
   // Products summary for Products tab
+  // Products summary for Products tab (only confirmed invoices)
   const productsSummary = useMemo(() => {
-    const storeInvoiceIds = storeInvoices.map(inv => inv.id);
-    const storeLines = allInvoiceLines.filter(line => storeInvoiceIds.includes(line.invoice_id));
+    const confirmedInvoiceIds = confirmedStoreInvoices.map(inv => inv.id);
+    const storeLines = allInvoiceLines.filter(line => confirmedInvoiceIds.includes(line.invoice_id));
     
     const productStats: Record<string, {
       productId: string;
@@ -215,7 +221,7 @@ export default function StoreDetails() {
     });
 
     return Object.values(productStats).sort((a, b) => b.revenue - a.revenue);
-  }, [storeInvoices, allInvoiceLines, products]);
+  }, [confirmedStoreInvoices, allInvoiceLines, products]);
 
   // Statement data
   const statementData = useMemo(() => {
@@ -562,6 +568,7 @@ export default function StoreDetails() {
               </SelectTrigger>
               <SelectContent className="bg-popover">
                 <SelectItem value="all">All Status</SelectItem>
+                <SelectItem value="DRAFT">Draft</SelectItem>
                 <SelectItem value="CONFIRMED">Confirmed</SelectItem>
                 <SelectItem value="PAID">Paid</SelectItem>
                 <SelectItem value="PARTIAL">Partial</SelectItem>
