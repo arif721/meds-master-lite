@@ -516,6 +516,8 @@ export default function Sales() {
       customerAddress: customer?.address || undefined,
       customerPhone: customer?.phone || undefined,
       sellerName: seller?.name,
+      sellerDesignation: seller?.designation || undefined,
+      sellerPhone: seller?.phone || undefined,
       storeName: store?.name,
       getProductName,
       lines: enhancedLines,

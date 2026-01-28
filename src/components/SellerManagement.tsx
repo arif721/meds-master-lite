@@ -41,6 +41,7 @@ export default function SellerManagement() {
     name: '',
     phone: '',
     address: '',
+    designation: '',
     commission_type: 'PERCENTAGE' as CommissionType,
     commission_value: '',
     active: true,
@@ -112,6 +113,7 @@ export default function SellerManagement() {
       name: formData.name.trim(),
       phone: formData.phone.trim() || null,
       address: formData.address.trim() || null,
+      designation: formData.designation.trim() || null,
       commission_type: formData.commission_type,
       commission_value: parseFloat(formData.commission_value) || 0,
       active: formData.active,
@@ -133,6 +135,7 @@ export default function SellerManagement() {
       name: seller.name,
       phone: seller.phone || '',
       address: seller.address || '',
+      designation: seller.designation || '',
       commission_type: seller.commission_type,
       commission_value: seller.commission_value.toString(),
       active: seller.active,
@@ -153,6 +156,7 @@ export default function SellerManagement() {
       name: '',
       phone: '',
       address: '',
+      designation: '',
       commission_type: 'PERCENTAGE',
       commission_value: '',
       active: true,
@@ -355,6 +359,16 @@ export default function SellerManagement() {
               </div>
 
               <div className="input-group">
+                <Label htmlFor="designation">Designation/Position</Label>
+                <Input
+                  id="designation"
+                  value={formData.designation}
+                  onChange={(e) => setFormData({ ...formData, designation: e.target.value })}
+                  placeholder="e.g., Sales Representative"
+                />
+              </div>
+
+              <div className="input-group">
                 <Label htmlFor="phone">Phone Number</Label>
                 <Input
                   id="phone"
@@ -461,6 +475,10 @@ export default function SellerManagement() {
                 </div>
 
                 <div className="grid grid-cols-2 gap-4 p-4 bg-muted/50 rounded-lg">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Designation</p>
+                    <p className="font-medium">{viewSeller.designation || '—'}</p>
+                  </div>
                   <div>
                     <p className="text-sm text-muted-foreground">Phone</p>
                     <p className="font-medium">{viewSeller.phone || '—'}</p>

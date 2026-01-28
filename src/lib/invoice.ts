@@ -22,6 +22,8 @@ interface InvoiceData {
   customerAddress?: string;
   customerPhone?: string;
   sellerName?: string;
+  sellerDesignation?: string;
+  sellerPhone?: string;
   storeName?: string;
   getProductName: (productId: string) => string;
   lines?: InvoiceLineData[]; // Enhanced line data
@@ -37,6 +39,8 @@ export function generateInvoiceHTML(data: InvoiceData): string {
     customerAddress, 
     customerPhone, 
     sellerName, 
+    sellerDesignation,
+    sellerPhone,
     storeName,
     getProductName,
     lines,
@@ -192,8 +196,7 @@ export function generateInvoiceHTML(data: InvoiceData): string {
           display: flex;
           justify-content: space-between;
           align-items: flex-start;
-          padding: 25px 30px 15px;
-          border-bottom: 1px solid #e2e8f0;
+          padding: 25px 30px 20px;
           position: relative;
           z-index: 1;
         }
@@ -230,24 +233,57 @@ export function generateInvoiceHTML(data: InvoiceData): string {
         }
         .logo-container {
           display: flex;
-          flex-direction: column;
+          flex-direction: row;
           align-items: center;
-          gap: 8px;
+          gap: 15px;
         }
         .logo-container img {
-          width: 160px;
-          height: 160px;
+          width: 70px;
+          height: 70px;
+        }
+        .company-info {
+          text-align: left;
         }
         .company-name {
-          font-size: 16px;
+          font-size: 14px;
           font-weight: 700;
           color: #1e3a5f;
-          text-align: center;
+          margin-bottom: 2px;
         }
-        .company-country {
-          font-size: 12px;
+        .company-address {
+          font-size: 10px;
           color: #64748b;
-          text-align: center;
+          line-height: 1.4;
+        }
+        .company-phone {
+          font-size: 10px;
+          color: #1e3a5f;
+          font-weight: 500;
+          margin-top: 2px;
+        }
+        .seller-info {
+          margin-top: 6px;
+          padding-top: 6px;
+          border-top: 1px dashed #e2e8f0;
+        }
+        .seller-label {
+          font-size: 9px;
+          color: #94a3b8;
+          text-transform: uppercase;
+          letter-spacing: 0.3px;
+        }
+        .seller-name {
+          font-size: 11px;
+          font-weight: 600;
+          color: #1e3a5f;
+        }
+        .seller-designation {
+          font-size: 10px;
+          color: #64748b;
+        }
+        .seller-phone {
+          font-size: 10px;
+          color: #475569;
         }
         
         /* === BILLING SECTION === */
@@ -653,8 +689,11 @@ export function generateInvoiceHTML(data: InvoiceData): string {
           <div class="header-right">
             <div class="logo-container">
               <img src="/favicon.svg" alt="Gazi Laboratories" />
-              <div class="company-name">GAZI LABORATORIES LTD.</div>
-              <div class="company-country">Islamiahat, Hathazari, Chattogram</div>
+              <div class="company-info">
+                <div class="company-name">GAZI LABORATORIES LTD.</div>
+                <div class="company-address">Islamiahat, Hathazari, Chattogram</div>
+                <div class="company-phone">+880 1987-501700</div>
+              </div>
             </div>
           </div>
         </div>
@@ -668,6 +707,14 @@ export function generateInvoiceHTML(data: InvoiceData): string {
               <div class="billing-detail">Mamtaj Center (1st Floor)</div>
               <div class="billing-detail">Islamiahat, Hathazari, Chattogram</div>
               <div class="billing-phone">+880 1987-501700</div>
+              ${sellerName ? `
+              <div class="seller-info">
+                <div class="seller-label">Sales Representative</div>
+                <div class="seller-name">${sellerName}</div>
+                ${sellerDesignation ? `<div class="seller-designation">${sellerDesignation}</div>` : ''}
+                ${sellerPhone ? `<div class="seller-phone">${sellerPhone}</div>` : ''}
+              </div>
+              ` : ''}
             </div>
           </div>
           <div class="billing-box">

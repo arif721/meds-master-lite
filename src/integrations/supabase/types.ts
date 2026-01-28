@@ -763,6 +763,7 @@ export type Database = {
           created_at: string
           deleted_at: string | null
           deleted_by: string | null
+          designation: string | null
           id: string
           is_deleted: boolean
           name: string
@@ -776,6 +777,7 @@ export type Database = {
           created_at?: string
           deleted_at?: string | null
           deleted_by?: string | null
+          designation?: string | null
           id?: string
           is_deleted?: boolean
           name: string
@@ -789,6 +791,7 @@ export type Database = {
           created_at?: string
           deleted_at?: string | null
           deleted_by?: string | null
+          designation?: string | null
           id?: string
           is_deleted?: boolean
           name?: string
