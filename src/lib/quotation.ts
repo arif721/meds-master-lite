@@ -234,6 +234,12 @@ export function generateQuotationHTML(data: QuotationData): string {
         .company-info {
           text-align: left;
         }
+        .company-name {
+          font-size: 14px;
+          font-weight: 700;
+          color: #1e3a5f;
+          margin-bottom: 2px;
+        }
         .company-address {
           font-size: 11px;
           color: #64748b;
@@ -718,6 +724,7 @@ export function generateQuotationHTML(data: QuotationData): string {
             <div class="logo-container">
               <img src="/favicon.svg" alt="Gazi Laboratories" />
               <div class="company-info">
+                <div class="company-name">Gazi Laboratories Ltd.</div>
                 <div class="company-address">Islamiahat, Hathazari, Chattogram</div>
                 <div class="company-phone">+880 1987-501700</div>
               </div>

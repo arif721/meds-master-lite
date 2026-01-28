@@ -249,6 +249,12 @@ export function generateInvoiceHTML(data: InvoiceData): string {
         .company-info {
           text-align: left;
         }
+        .company-name {
+          font-size: 14px;
+          font-weight: 700;
+          color: #1e3a5f;
+          margin-bottom: 2px;
+        }
         .company-address {
           font-size: 11px;
           color: #64748b;
@@ -259,30 +265,6 @@ export function generateInvoiceHTML(data: InvoiceData): string {
           color: #1e3a5f;
           font-weight: 500;
           margin-top: 2px;
-        }
-        .seller-info {
-          margin-top: 6px;
-          padding-top: 6px;
-          border-top: 1px dashed #e2e8f0;
-        }
-        .seller-label {
-          font-size: 9px;
-          color: #94a3b8;
-          text-transform: uppercase;
-          letter-spacing: 0.3px;
-        }
-        .seller-name {
-          font-size: 11px;
-          font-weight: 600;
-          color: #1e3a5f;
-        }
-        .seller-designation {
-          font-size: 10px;
-          color: #64748b;
-        }
-        .seller-phone {
-          font-size: 10px;
-          color: #475569;
         }
         
         /* === BILLING SECTION === */
@@ -697,6 +679,7 @@ export function generateInvoiceHTML(data: InvoiceData): string {
             <div class="logo-container">
               <img src="/favicon.svg" alt="Gazi Laboratories" />
               <div class="company-info">
+                <div class="company-name">Gazi Laboratories Ltd.</div>
                 <div class="company-address">Islamiahat, Hathazari, Chattogram</div>
                 <div class="company-phone">+880 1987-501700</div>
               </div>
