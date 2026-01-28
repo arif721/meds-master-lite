@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Download, Upload, Database, AlertTriangle, Users, Trash2, RefreshCw, Loader2, CalendarDays } from 'lucide-react';
+import { Download, Upload, Database, AlertTriangle, Users, Trash2, RefreshCw, Loader2, CalendarDays, PenTool } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useStore } from '@/store/useStore';
 import { toast } from '@/hooks/use-toast';
@@ -15,6 +15,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import SellerManagement from '@/components/SellerManagement';
+import SignatureManagement from '@/components/SignatureManagement';
 import { MonthlyStatement } from '@/components/MonthlyStatement';
 import { supabase } from '@/integrations/supabase/client';
 import { 
@@ -288,18 +289,22 @@ export default function Settings() {
 
       {/* Settings Tabs */}
       <Tabs defaultValue="backup" className="w-full">
-        <TabsList className="grid w-full grid-cols-3 max-w-lg">
+        <TabsList className="grid w-full grid-cols-4 max-w-2xl">
           <TabsTrigger value="backup" className="flex items-center gap-2">
             <Database className="w-4 h-4" />
             Backup
           </TabsTrigger>
           <TabsTrigger value="statement" className="flex items-center gap-2">
             <CalendarDays className="w-4 h-4" />
-            Monthly Statement
+            Statement
           </TabsTrigger>
           <TabsTrigger value="sellers" className="flex items-center gap-2">
             <Users className="w-4 h-4" />
             Sellers
+          </TabsTrigger>
+          <TabsTrigger value="signatures" className="flex items-center gap-2">
+            <PenTool className="w-4 h-4" />
+            Signatures
           </TabsTrigger>
         </TabsList>
 
@@ -470,6 +475,11 @@ export default function Settings() {
         {/* Seller Management Tab */}
         <TabsContent value="sellers" className="mt-6">
           <SellerManagement />
+        </TabsContent>
+
+        {/* Signature Management Tab */}
+        <TabsContent value="signatures" className="mt-6">
+          <SignatureManagement />
         </TabsContent>
       </Tabs>
 

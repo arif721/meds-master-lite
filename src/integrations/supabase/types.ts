@@ -799,6 +799,47 @@ export type Database = {
         }
         Relationships: []
       }
+      signatures: {
+        Row: {
+          created_at: string
+          id: string
+          image_url: string
+          is_default: boolean
+          name: string
+          seller_id: string | null
+          signature_type: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          image_url: string
+          is_default?: boolean
+          name: string
+          seller_id?: string | null
+          signature_type?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          image_url?: string
+          is_default?: boolean
+          name?: string
+          seller_id?: string | null
+          signature_type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "signatures_seller_id_fkey"
+            columns: ["seller_id"]
+            isOneToOne: false
+            referencedRelation: "sellers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       stock_adjustments: {
         Row: {
           batch_id: string
