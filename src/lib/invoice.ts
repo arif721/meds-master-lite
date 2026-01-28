@@ -654,7 +654,7 @@ export function generateInvoiceHTML(data: InvoiceData): string {
             <div class="logo-container">
               <img src="/favicon.svg" alt="Gazi Laboratories" />
               <div class="company-name">GAZI LABORATORIES LTD.</div>
-              <div class="company-country">Bangladesh</div>
+              <div class="company-country">Islamiahat, Hathazari, Chattogram</div>
             </div>
           </div>
         </div>
