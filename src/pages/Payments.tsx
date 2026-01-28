@@ -55,10 +55,10 @@ export default function Payments() {
     referenceNote: '',
   });
 
-  // Only show invoices with due amount
+  // Only show invoices with due amount (CONFIRMED, PARTIAL, or DRAFT with due > 0)
   const unpaidInvoices = useMemo(() => {
     return dbInvoices.filter(
-      (inv) => (inv.status === 'CONFIRMED' || inv.status === 'PARTIAL') && inv.due > 0
+      (inv) => (inv.status === 'CONFIRMED' || inv.status === 'PARTIAL' || inv.status === 'DRAFT') && inv.due > 0
     );
   }, [dbInvoices]);
 
