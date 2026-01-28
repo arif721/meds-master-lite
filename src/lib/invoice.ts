@@ -270,21 +270,29 @@ export function generateInvoiceHTML(data: InvoiceData): string {
         /* === BILLING SECTION === */
         .billing-section {
           display: flex;
+          justify-content: space-between;
           padding: 20px 30px;
-          gap: 0;
+          gap: 40px;
           position: relative;
           z-index: 1;
         }
         .billing-box {
-          flex: 1;
           min-width: 0;
         }
-        .billing-box:first-child {
-          padding-right: 15px;
-          border-right: 1px solid #e2e8f0;
+        .billing-box.bill-from {
+          flex: 0 0 auto;
         }
-        .billing-box:last-child {
-          padding-left: 15px;
+        .billing-box.bill-to {
+          flex: 0 0 auto;
+          text-align: right;
+        }
+        .billing-box.bill-to .billing-header {
+          float: right;
+          clear: both;
+        }
+        .billing-box.bill-to .billing-content {
+          clear: both;
+          text-align: right;
         }
         .billing-header {
           display: inline-block;
@@ -689,7 +697,7 @@ export function generateInvoiceHTML(data: InvoiceData): string {
         
         <!-- Billing Section -->
         <div class="billing-section">
-          <div class="billing-box">
+          <div class="billing-box bill-from">
             <div class="billing-header">Bill From</div>
             <div class="billing-content">
               ${sellerName ? `
@@ -699,7 +707,7 @@ export function generateInvoiceHTML(data: InvoiceData): string {
               ` : '<div class="billing-detail text-muted">No seller assigned</div>'}
             </div>
           </div>
-          <div class="billing-box">
+          <div class="billing-box bill-to">
             <div class="billing-header">Bill To</div>
             <div class="billing-content">
               <div class="billing-name">${customerName || 'N/A'}</div>
