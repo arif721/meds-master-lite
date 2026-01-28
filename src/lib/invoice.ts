@@ -235,8 +235,8 @@ export function generateInvoiceHTML(data: InvoiceData): string {
           gap: 6px;
         }
         .logo-container img {
-          width: 80px;
-          height: 80px;
+          width: 160px;
+          height: 160px;
         }
         .company-name {
           font-size: 13px;
