@@ -39,8 +39,9 @@ export type DbProduct = {
   name: string;
   category_id: string | null;
   unit: 'Tablet' | 'Capsule' | 'Bottle' | 'Box' | 'Strip' | 'Piece' | 'Tube' | 'Jar' | 'Pot';
-  cost_price: number;
-  sales_price: number;
+  cost_price: number; // Internal accounting cost for P&L
+  tp_rate: number;    // Trade Price / Buying rate from supplier
+  sales_price: number; // MRP - Maximum Retail Price
   sku: string | null;
   active: boolean;
   created_at: string;
