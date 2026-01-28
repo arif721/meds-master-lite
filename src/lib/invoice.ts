@@ -555,20 +555,15 @@ export function generateInvoiceHTML(data: InvoiceData): string {
           margin-top: auto;
           position: relative;
           z-index: 1;
-        }
-        .footer-title {
-          font-size: 18px;
-          font-weight: 700;
-          color: #1e3a5f;
-          margin-bottom: 6px;
+          text-align: center;
         }
         .footer-text {
-          font-size: 11px;
-          color: #475569;
-          line-height: 1.5;
+          font-size: 14px;
+          font-weight: 600;
+          color: #1e3a5f;
+          margin-bottom: 8px;
         }
         .footer-contact {
-          margin-top: 6px;
           font-size: 10px;
           color: #64748b;
         }
@@ -781,13 +776,8 @@ export function generateInvoiceHTML(data: InvoiceData): string {
         
         <!-- Footer -->
         <div class="footer">
-          <div class="footer-title">Thank you!</div>
-          <div class="footer-text">
-            Thank you for your business with Gazi Laboratories Ltd.
-          </div>
-          <div class="footer-contact">
-            Email: gazilaboratories58@gmail.com | Phone: +880 1987-501700
-          </div>
+          <div class="footer-text">Thank you for your business with Gazi Laboratories Ltd.</div>
+          <div class="footer-contact">Email: gazilaboratories58@gmail.com | Phone: +880 1987-501700</div>
         </div>
       </div>
       
