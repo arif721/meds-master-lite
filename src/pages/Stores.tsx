@@ -470,6 +470,7 @@ export default function Stores() {
         data={filteredStores}
         keyExtractor={(store) => store.id}
         emptyMessage={showDeleted ? "Trash is empty" : "No stores found"}
+        onRowClick={(store) => !showDeleted && navigate(`/stores/${store.id}`)}
       />
 
       {/* Soft Delete Dialog */}

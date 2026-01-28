@@ -431,6 +431,7 @@ export default function Payments() {
         data={filteredPayments.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())}
         keyExtractor={(payment) => payment.id}
         emptyMessage="No payments recorded"
+        onRowClick={(payment) => handlePrintReceipt(payment)}
       />
     </div>
   );
