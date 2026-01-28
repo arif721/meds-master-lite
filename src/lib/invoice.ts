@@ -696,18 +696,11 @@ export function generateInvoiceHTML(data: InvoiceData): string {
           <div class="billing-box">
             <div class="billing-header">Bill From</div>
             <div class="billing-content">
-              <div class="billing-name">Gazi Laboratories Ltd.</div>
-              <div class="billing-detail">Mamtaj Center (1st Floor)</div>
-              <div class="billing-detail">Islamiahat, Hathazari, Chattogram</div>
-              <div class="billing-phone">+880 1987-501700</div>
               ${sellerName ? `
-              <div class="seller-info">
-                <div class="seller-label">Sales Representative</div>
-                <div class="seller-name">${sellerName}</div>
-                ${sellerDesignation ? `<div class="seller-designation">${sellerDesignation}</div>` : ''}
-                ${sellerPhone ? `<div class="seller-phone">${sellerPhone}</div>` : ''}
-              </div>
-              ` : ''}
+              <div class="billing-name">${sellerName}</div>
+              ${sellerDesignation ? `<div class="billing-detail">${sellerDesignation}</div>` : ''}
+              ${sellerPhone ? `<div class="billing-phone">${sellerPhone}</div>` : ''}
+              ` : '<div class="billing-detail text-muted">No seller assigned</div>'}
             </div>
           </div>
           <div class="billing-box">
