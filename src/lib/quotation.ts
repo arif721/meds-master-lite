@@ -216,21 +216,23 @@ export function generateQuotationHTML(data: QuotationData): string {
         .logo-container {
           display: flex;
           flex-direction: column;
-          align-items: flex-end;
-          gap: 6px;
+          align-items: center;
+          gap: 8px;
         }
         .logo-container img {
           width: 160px;
           height: 160px;
         }
         .company-name {
-          font-size: 13px;
+          font-size: 16px;
           font-weight: 700;
           color: #1e3a5f;
+          text-align: center;
         }
         .company-country {
-          font-size: 11px;
+          font-size: 12px;
           color: #64748b;
+          text-align: center;
         }
         
         /* === VALIDITY BANNER === */
