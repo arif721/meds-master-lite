@@ -394,14 +394,14 @@ export default function SignatureManagement() {
               <div className="space-y-2">
                 <Label>Assign to Seller</Label>
                 <Select
-                  value={formData.sellerId}
-                  onValueChange={(value) => setFormData({ ...formData, sellerId: value })}
+                  value={formData.sellerId || "__all__"}
+                  onValueChange={(value) => setFormData({ ...formData, sellerId: value === "__all__" ? "" : value })}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select seller (optional)" />
                   </SelectTrigger>
                   <SelectContent className="bg-popover">
-                    <SelectItem value="">All Sellers (Global)</SelectItem>
+                    <SelectItem value="__all__">All Sellers (Global)</SelectItem>
                     {activeSellers.map((seller: DbSeller) => (
                       <SelectItem key={seller.id} value={seller.id}>
                         {seller.name}
