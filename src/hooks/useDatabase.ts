@@ -191,6 +191,7 @@ export function useCategories() {
       const { data, error } = await supabase
         .from('categories')
         .select('*')
+        .eq('is_deleted', false)
         .order('name');
       if (error) throw error;
       return data as DbCategory[];
@@ -249,6 +250,7 @@ export function useProducts() {
       const { data, error } = await supabase
         .from('products')
         .select('*')
+        .eq('is_deleted', false)
         .order('name');
       if (error) throw error;
       return data as DbProduct[];
@@ -354,6 +356,7 @@ export function useSellers() {
       const { data, error } = await supabase
         .from('sellers')
         .select('*')
+        .eq('is_deleted', false)
         .order('name');
       if (error) throw error;
       return data as DbSeller[];
@@ -458,6 +461,7 @@ export function useBatches() {
       const { data, error } = await supabase
         .from('batches')
         .select('*')
+        .eq('is_deleted', false)
         .order('created_at', { ascending: false });
       if (error) throw error;
       return data as DbBatch[];
@@ -572,6 +576,7 @@ export function useCustomers() {
       const { data, error } = await supabase
         .from('customers')
         .select('*')
+        .eq('is_deleted', false)
         .order('name');
       if (error) throw error;
       return data as DbCustomer[];

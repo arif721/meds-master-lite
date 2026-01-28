@@ -1,4 +1,5 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Plus, Search, CreditCard, Wallet, Smartphone, FileText, Printer, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -37,6 +38,10 @@ const paymentMethods: { value: PaymentMethod; label: string; icon: typeof Credit
 ];
 
 export default function Payments() {
+  // URL params for pre-selecting invoice
+  const [searchParams, setSearchParams] = useSearchParams();
+  const invoiceFromUrl = searchParams.get('invoice');
+
   // Database hooks
   const { data: dbInvoices = [], isLoading: invoicesLoading } = useInvoices();
   const { data: dbPayments = [], isLoading: paymentsLoading } = usePayments();
@@ -61,6 +66,21 @@ export default function Payments() {
       (inv) => (inv.status === 'CONFIRMED' || inv.status === 'PARTIAL' || inv.status === 'DRAFT') && inv.due > 0
     );
   }, [dbInvoices]);
+
+  // Auto-open dialog and pre-select invoice from URL
+  useEffect(() => {
+    if (invoiceFromUrl && unpaidInvoices.length > 0 && !invoicesLoading) {
+      const matchingInvoice = unpaidInvoices.find(
+        inv => inv.invoice_number.toLowerCase() === invoiceFromUrl.toLowerCase()
+      );
+      if (matchingInvoice) {
+        setFormData(prev => ({ ...prev, invoiceId: matchingInvoice.id }));
+        setDialogOpen(true);
+        // Clear URL param
+        setSearchParams({});
+      }
+    }
+  }, [invoiceFromUrl, unpaidInvoices, invoicesLoading, setSearchParams]);
 
   // Enrich payments with invoice and customer info for display
   const enrichedPayments = useMemo(() => {
