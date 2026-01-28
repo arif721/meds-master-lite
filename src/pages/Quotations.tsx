@@ -964,6 +964,7 @@ export default function Quotations() {
         data={filteredQuotations.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())}
         keyExtractor={(q) => q.id}
         emptyMessage="No quotations found"
+        onRowClick={(q) => setViewQuotation(q)}
       />
 
       {/* View Quotation Dialog */}

@@ -337,6 +337,7 @@ export default function Customers() {
         data={filteredCustomers}
         keyExtractor={(customer) => customer.id}
         emptyMessage={showDeleted ? "Trash is empty" : "No customers found"}
+        onRowClick={(customer) => !showDeleted && handleEdit(customer)}
       />
 
       {/* Soft Delete Dialog */}

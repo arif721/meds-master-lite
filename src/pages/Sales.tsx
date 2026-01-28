@@ -1048,6 +1048,7 @@ export default function Sales() {
         data={filteredInvoices.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())}
         keyExtractor={(inv) => inv.id}
         emptyMessage="No invoices found"
+        onRowClick={(inv) => setViewInvoice(inv)}
       />
 
       {/* View Invoice Dialog */}
