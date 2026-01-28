@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { DataTable } from '@/components/DataTable';
 import { useCustomers, useSellers, useProducts, DbSeller, useAddInvoice, useConfirmInvoice, useBatches } from '@/hooks/useDatabase';
 import { useStores, PAYMENT_TERMS_LABELS, DbStore } from '@/hooks/useStores';
+import { useSignatures, DbSignature } from '@/hooks/useSignatures';
 import { formatCurrency, formatDate, generateId, formatDateOnly, isExpired, generateInvoiceNumber } from '@/lib/format';
 import { openQuotationWindow } from '@/lib/quotation';
 import {
@@ -107,6 +108,7 @@ export default function Quotations() {
   const { data: dbBatches = [] } = useBatches();
   const { data: quotations = [], isLoading: quotationsLoading } = useQuotations();
   const { data: quotationLines = [] } = useQuotationLines();
+  const { data: signatures = [] } = useSignatures();
   
   // Invoice mutations for conversion
   const addInvoiceMutation = useAddInvoice();
@@ -187,6 +189,23 @@ export default function Quotations() {
     const seller = quotation.seller_id ? sellers.find((s) => s.id === quotation.seller_id) : null;
     const store = quotation.store_id ? stores.find((s) => s.id === quotation.store_id) : null;
     
+    // Find signatures for this seller
+    const getDefaultSignature = (sellerId: string | null, signatureType: 'prepared_by' | 'representative'): string | undefined => {
+      if (sellerId) {
+        const sellerDefault = signatures.find(
+          (s: DbSignature) => s.seller_id === sellerId && s.signature_type === signatureType && s.is_default
+        );
+        if (sellerDefault) return sellerDefault.image_url;
+      }
+      const globalDefault = signatures.find(
+        (s: DbSignature) => !s.seller_id && s.signature_type === signatureType && s.is_default
+      );
+      return globalDefault?.image_url;
+    };
+    
+    const preparedBySignatureUrl = getDefaultSignature(quotation.seller_id, 'prepared_by');
+    const representativeSignatureUrl = getDefaultSignature(quotation.seller_id, 'representative');
+    
     const lineData = quotation.lines.map(line => {
       const product = dbProducts.find(p => p.id === line.product_id);
       return {
@@ -219,6 +238,8 @@ export default function Quotations() {
       discount: quotation.discount,
       discountType: quotation.discount_type,
       total: quotation.total,
+      preparedBySignatureUrl,
+      representativeSignatureUrl,
     });
   };
 

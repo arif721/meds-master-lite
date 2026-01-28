@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { DataTable } from '@/components/DataTable';
 import { useCustomers, useSellers, useInvoices, useInvoiceLines, useAddInvoice, useConfirmInvoice, useProducts, useBatches, DbSeller, DbInvoice, DbInvoiceLine } from '@/hooks/useDatabase';
 import { useStores, PAYMENT_TERMS_LABELS, DbStore } from '@/hooks/useStores';
+import { useSignatures, useSellerSignatures, DbSignature } from '@/hooks/useSignatures';
 import { formatCurrency, formatDate, formatDateOnly, formatTimeWithSeconds, isExpired, generateInvoiceNumber } from '@/lib/format';
 import { AdminGreetingClock } from '@/components/AdminGreetingClock';
 import { openInvoiceWindow, openCustomerCopyWindow, openOfficeCopyWindow } from '@/lib/invoice';
@@ -48,7 +49,7 @@ export default function Sales() {
   const { data: customers = [], isLoading: customersLoading } = useCustomers();
   const { data: stores = [], isLoading: storesLoading } = useStores();
   const { data: dbSellers = [], isLoading: sellersLoading } = useSellers();
-  
+  const { data: signatures = [] } = useSignatures();
   // Mutations
   const addInvoiceMutation = useAddInvoice();
   const confirmInvoiceMutation = useConfirmInvoice();
@@ -468,6 +469,25 @@ export default function Sales() {
     const seller = invoice.seller_id ? dbSellers.find((s) => s.id === invoice.seller_id) : null;
     const store = invoice.store_id ? stores.find((s) => s.id === invoice.store_id) : null;
     
+    // Find signatures for this seller
+    const getDefaultSignature = (sellerId: string | null, signatureType: 'prepared_by' | 'representative'): string | undefined => {
+      // First try seller-specific default
+      if (sellerId) {
+        const sellerDefault = signatures.find(
+          (s: DbSignature) => s.seller_id === sellerId && s.signature_type === signatureType && s.is_default
+        );
+        if (sellerDefault) return sellerDefault.image_url;
+      }
+      // Fallback to global default
+      const globalDefault = signatures.find(
+        (s: DbSignature) => !s.seller_id && s.signature_type === signatureType && s.is_default
+      );
+      return globalDefault?.image_url;
+    };
+    
+    const preparedBySignatureUrl = getDefaultSignature(invoice.seller_id, 'prepared_by');
+    const representativeSignatureUrl = getDefaultSignature(invoice.seller_id, 'representative');
+    
     // Transform to the expected format for invoice printing
     const invoiceForPrint = {
       id: invoice.id,
@@ -521,6 +541,8 @@ export default function Sales() {
       storeName: store?.name,
       getProductName,
       lines: enhancedLines,
+      preparedBySignatureUrl,
+      representativeSignatureUrl,
     };
   };
 

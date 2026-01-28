@@ -30,6 +30,9 @@ interface InvoiceData {
   showTPRate?: boolean; // Toggle to show TP Rate column
   showCostProfit?: boolean; // Toggle to show Cost Price & Profit (Office Copy only)
   copyType?: 'CUSTOMER' | 'OFFICE'; // Copy type for watermark
+  // Signature URLs (embedded images)
+  preparedBySignatureUrl?: string;
+  representativeSignatureUrl?: string;
 }
 
 export function generateInvoiceHTML(data: InvoiceData): string {
@@ -46,7 +49,9 @@ export function generateInvoiceHTML(data: InvoiceData): string {
     lines,
     showTPRate = true, // Always show TP Rate
     showCostProfit = false, // Only for Office Copy
-    copyType = 'CUSTOMER'
+    copyType = 'CUSTOMER',
+    preparedBySignatureUrl,
+    representativeSignatureUrl,
   } = data;
 
   const invoiceDate = new Date(invoice.date);
@@ -561,7 +566,15 @@ export function generateInvoiceHTML(data: InvoiceData): string {
           text-align: center;
         }
         .signature-space {
-          height: 40px;
+          height: 50px;
+          display: flex;
+          align-items: flex-end;
+          justify-content: center;
+        }
+        .signature-image {
+          max-height: 45px;
+          max-width: 120px;
+          object-fit: contain;
         }
         .signature-line {
           border-top: 1.5px solid #334155;
@@ -797,13 +810,21 @@ export function generateInvoiceHTML(data: InvoiceData): string {
             <div class="signature-label">Customer Signature</div>
           </div>
           <div class="signature-box">
-            <div class="signature-space"></div>
+            ${representativeSignatureUrl ? `
+            <div class="signature-space">
+              <img src="${representativeSignatureUrl}" alt="Representative Signature" class="signature-image" />
+            </div>
+            ` : '<div class="signature-space"></div>'}
             <div class="signature-line"></div>
             <div class="signature-label">Representative Signature</div>
             ${sellerName ? `<div class="signature-name">(${sellerName})</div>` : ''}
           </div>
           <div class="signature-box">
-            <div class="signature-space"></div>
+            ${preparedBySignatureUrl ? `
+            <div class="signature-space">
+              <img src="${preparedBySignatureUrl}" alt="Prepared By Signature" class="signature-image" />
+            </div>
+            ` : '<div class="signature-space"></div>'}
             <div class="signature-line"></div>
             <div class="signature-label">Prepared By</div>
           </div>
