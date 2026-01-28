@@ -220,8 +220,8 @@ export function generateQuotationHTML(data: QuotationData): string {
           gap: 6px;
         }
         .logo-container img {
-          width: 50px;
-          height: 50px;
+          width: 80px;
+          height: 80px;
         }
         .company-name {
           font-size: 13px;
