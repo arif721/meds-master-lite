@@ -50,22 +50,37 @@ export function ProfitLossReport({ period }: Props) {
 
   return (
     <div className="space-y-6">
+      {/* P&L Formula Explanation */}
+      <Alert className="border-primary/20 bg-primary/5">
+        <AlertTitle className="font-semibold">P&L Calculation Formula</AlertTitle>
+        <AlertDescription className="text-sm mt-1">
+          <strong>Net Sales</strong> = TP Sales − Total Discount | 
+          <strong> Total Cost</strong> = Cost Price × (Paid + Free Qty) | 
+          <strong> Net Profit</strong> = Net Sales − Total Cost
+        </AlertDescription>
+      </Alert>
+
       {/* Summary Metrics */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         <MetricCard
-          title="Total Sales"
+          title="TP Sales"
+          value={formatCurrency(metrics.totalTPSales)}
+          icon={<TrendingUp className="w-5 h-5" />}
+        />
+        <MetricCard
+          title="Total Discount"
+          value={formatCurrency(metrics.totalDiscount)}
+          variant="warning"
+        />
+        <MetricCard
+          title="Net Sales"
           value={formatCurrency(metrics.totalSales)}
           icon={<TrendingUp className="w-5 h-5" />}
         />
         <MetricCard
-          title="Total COGS"
+          title="Total Cost"
           value={formatCurrency(metrics.totalCOGS)}
           variant="warning"
-        />
-        <MetricCard
-          title="Gross Profit"
-          value={formatCurrency(metrics.grossProfit)}
-          variant={metrics.grossProfit >= 0 ? 'success' : 'danger'}
         />
         <MetricCard
           title="Net Profit"
@@ -162,11 +177,11 @@ export function ProfitLossReport({ period }: Props) {
         </Alert>
       )}
 
-      {/* Free Giveaway Section - Separate from P&L */}
+      {/* Free Giveaway Section - Included in Total Cost */}
       {(metrics.freeGiveawayQty > 0 || metrics.freeGiveawayCost > 0) && (
-        <Alert className="border-muted bg-muted/30">
-          <Gift className="h-4 w-4" />
-          <AlertTitle className="font-semibold">Free Giveaway Summary</AlertTitle>
+        <Alert className="border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800">
+          <Gift className="h-4 w-4 text-amber-600" />
+          <AlertTitle className="font-semibold text-amber-800 dark:text-amber-400">Free Giveaway Impact</AlertTitle>
           <AlertDescription className="mt-2">
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mt-3">
               <div className="p-3 rounded-lg bg-background border">
@@ -174,12 +189,12 @@ export function ProfitLossReport({ period }: Props) {
                 <p className="text-lg font-bold">{metrics.freeGiveawayQty} units</p>
               </div>
               <div className="p-3 rounded-lg bg-background border">
-                <p className="text-xs text-muted-foreground">Free Value (at Cost)</p>
-                <p className="text-lg font-bold">{formatCurrency(metrics.freeGiveawayCost)}</p>
+                <p className="text-xs text-muted-foreground">Free Items Cost</p>
+                <p className="text-lg font-bold text-destructive">{formatCurrency(metrics.freeGiveawayCost)}</p>
               </div>
               <div className="p-3 rounded-lg bg-background border md:col-span-1 col-span-2">
                 <p className="text-xs text-muted-foreground italic">
-                  ⓘ Free items are NOT included in COGS or Net Profit calculations.
+                  ⓘ Free items reduce profit via Total Cost. They don't add to sales revenue.
                 </p>
               </div>
             </div>
@@ -250,8 +265,8 @@ export function ProfitLossReport({ period }: Props) {
                     <TableHead>Invoice</TableHead>
                     <TableHead>Customer</TableHead>
                     <TableHead>Seller</TableHead>
-                    <TableHead className="text-right">Sales</TableHead>
-                    <TableHead className="text-right">COGS</TableHead>
+                    <TableHead className="text-right">Net Sales</TableHead>
+                    <TableHead className="text-right">Total Cost</TableHead>
                     <TableHead className="text-right">Profit</TableHead>
                     <TableHead className="text-right">Margin</TableHead>
                   </TableRow>
