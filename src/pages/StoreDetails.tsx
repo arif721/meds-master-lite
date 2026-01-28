@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Store, Phone, MapPin, User, Download, Printer, Loader2, Package, TrendingUp, DollarSign, Receipt, ShoppingCart, CalendarIcon } from 'lucide-react';
+import { ArrowLeft, Store, Phone, MapPin, User, Download, Printer, Loader2, Package, TrendingUp, DollarSign, Receipt, ShoppingCart, CalendarIcon, Eye } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -15,12 +15,13 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useStore as useStoreById, PAYMENT_TERMS_LABELS } from '@/hooks/useStores';
-import { useInvoices, useInvoiceLines, usePayments, useProducts } from '@/hooks/useDatabase';
+import { useInvoices, useInvoiceLines, usePayments, useProducts, DbInvoice } from '@/hooks/useDatabase';
 import { formatCurrency, formatDateOnly, formatTimeWithSeconds } from '@/lib/format';
 import { startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, isWithinInterval, parseISO, format } from 'date-fns';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
+import { InvoiceDetailDialog } from '@/components/InvoiceDetailDialog';
 
 type DatePreset = 'today' | 'this_week' | 'this_month' | 'custom';
 
@@ -41,6 +42,8 @@ export default function StoreDetails() {
   });
   const [invoiceSearch, setInvoiceSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [selectedInvoice, setSelectedInvoice] = useState<DbInvoice | null>(null);
+  const [invoiceDialogOpen, setInvoiceDialogOpen] = useState(false);
 
   // Calculate date range based on preset
   const dateRange = useMemo(() => {
@@ -601,10 +604,28 @@ export default function StoreDetails() {
                   {inv.status}
                 </Badge>
               )},
+              { key: 'actions', header: 'Actions', render: (inv) => (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedInvoice(inv);
+                    setInvoiceDialogOpen(true);
+                  }}
+                >
+                  <Eye className="w-4 h-4 mr-1" />
+                  View
+                </Button>
+              )},
             ]}
             data={filteredInvoices}
             keyExtractor={(inv) => inv.id}
             emptyMessage="No invoices found"
+            onRowClick={(inv) => {
+              setSelectedInvoice(inv);
+              setInvoiceDialogOpen(true);
+            }}
           />
         </TabsContent>
 
@@ -790,6 +811,13 @@ export default function StoreDetails() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Invoice Detail Dialog */}
+      <InvoiceDetailDialog
+        invoice={selectedInvoice}
+        open={invoiceDialogOpen}
+        onOpenChange={setInvoiceDialogOpen}
+      />
     </div>
   );
 }
