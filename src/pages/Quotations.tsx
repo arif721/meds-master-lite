@@ -4,8 +4,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { DataTable } from '@/components/DataTable';
 import { useStore } from '@/store/useStore';
-import { useCustomers } from '@/hooks/useDatabase';
+import { useCustomers, useSellers } from '@/hooks/useDatabase';
+import { useStores } from '@/hooks/useStores';
 import { formatCurrency, formatDate, generateId } from '@/lib/format';
+import { openQuotationWindow } from '@/lib/quotation';
 import {
   Dialog,
   DialogContent,
@@ -29,6 +31,8 @@ export default function Quotations() {
   const navigate = useNavigate();
   const { products, quotations, addQuotation, convertQuotationToInvoice, cancelQuotation } = useStore();
   const { data: customers = [], isLoading: customersLoading } = useCustomers();
+  const { data: sellers = [] } = useSellers();
+  const { data: stores = [] } = useStores();
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [viewQuotation, setViewQuotation] = useState<typeof quotations[0] | null>(null);
@@ -61,115 +65,42 @@ export default function Quotations() {
 
   const printQuotation = (quotation: Quotation) => {
     const customer = customers.find((c) => c.id === quotation.customerId);
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) return;
+    
+    // Build line data with TP Rate, MRP, etc.
+    const lineData = quotation.lines.map(line => {
+      const product = products.find(p => p.id === line.productId);
+      // Use salesPrice as both MRP and TP Rate since local Product type doesn't have tp_rate
+      const mrp = product?.salesPrice || line.unitPrice;
+      const tpRate = product?.costPrice || line.unitPrice; // Use costPrice as TP approximation
+      return {
+        id: line.id,
+        productName: product?.name || 'Unknown',
+        quantity: line.quantity,
+        freeQuantity: 0, // Quotations don't have free qty by default
+        unitPrice: mrp, // MRP
+        tpRate: tpRate, // TP Rate
+        discountType: 'AMOUNT' as const,
+        discountValue: 0,
+        lineTotal: line.lineTotal,
+      };
+    });
 
-    const html = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>Quotation - ${quotation.quotationNumber}</title>
-        <style>
-          * { margin: 0; padding: 0; box-sizing: border-box; }
-          body { font-family: 'Segoe UI', Arial, sans-serif; padding: 20px; max-width: 800px; margin: 0 auto; }
-          .header { display: flex; justify-content: space-between; align-items: flex-start; padding: 20px; background: #1e3a5f; color: white; border-radius: 8px 8px 0 0; }
-          .logo { font-size: 20px; font-weight: bold; }
-          .logo-sub { font-size: 12px; opacity: 0.8; }
-          .quote-info { text-align: right; }
-          .quote-info h2 { font-size: 24px; margin-bottom: 5px; }
-          .quote-info p { font-size: 12px; opacity: 0.9; }
-          .parties { display: flex; justify-content: space-between; padding: 20px; background: #f8f9fa; }
-          .party h4 { color: #1e3a5f; font-size: 12px; margin-bottom: 8px; text-transform: uppercase; }
-          .party p { font-size: 13px; line-height: 1.5; }
-          .items { padding: 20px; }
-          table { width: 100%; border-collapse: collapse; }
-          th { background: #1e3a5f; color: white; padding: 10px; text-align: left; font-size: 12px; }
-          td { padding: 10px; border-bottom: 1px solid #eee; font-size: 13px; }
-          tr:nth-child(even) { background: #f9f9f9; }
-          .total-row { background: #1e3a5f !important; }
-          .total-row td { color: white; font-weight: bold; font-size: 14px; }
-          .footer { text-align: center; padding: 20px; background: #e3f2fd; border-radius: 0 0 8px 8px; }
-          .footer p { font-size: 11px; color: #666; margin-top: 5px; }
-          .validity { padding: 15px 20px; background: #fff3cd; font-size: 12px; color: #856404; }
-          @media print { body { padding: 0; } }
-        </style>
-      </head>
-      <body>
-        <div class="header">
-          <div>
-            <div class="logo">Gazi Laboratories Ltd.</div>
-            <div class="logo-sub">Pharmaceutical Excellence</div>
-          </div>
-          <div class="quote-info">
-            <h2>QUOTATION</h2>
-            <p>${quotation.quotationNumber}</p>
-            <p>Date: ${formatDate(quotation.date)}</p>
-          </div>
-        </div>
-        
-        <div class="validity">
-          <strong>Valid Until:</strong> ${formatDate(quotation.validUntil)} | 
-          <strong>Status:</strong> ${quotation.status}
-        </div>
-        
-        <div class="parties">
-          <div class="party">
-            <h4>From</h4>
-            <p><strong>Gazi Laboratories Ltd.</strong></p>
-            <p>Mamtaj Center, Islamiahat</p>
-            <p>Hathazari, Chattogram</p>
-            <p>+880 1987-501700</p>
-          </div>
-          <div class="party" style="text-align: right;">
-            <h4>To</h4>
-            <p><strong>${customer?.name || 'Unknown'}</strong></p>
-            <p>${customer?.phone || ''}</p>
-            <p>${customer?.address || ''}</p>
-          </div>
-        </div>
-        
-        <div class="items">
-          <table>
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Product</th>
-                <th style="text-align: center;">Quantity</th>
-                <th style="text-align: right;">Unit Price</th>
-                <th style="text-align: right;">Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${quotation.lines.map((line, index) => `
-                <tr>
-                  <td>${index + 1}</td>
-                  <td>${products.find(p => p.id === line.productId)?.name || 'Unknown'}</td>
-                  <td style="text-align: center;">${line.quantity}</td>
-                  <td style="text-align: right;">৳${line.unitPrice.toFixed(2)}</td>
-                  <td style="text-align: right;">৳${line.lineTotal.toFixed(2)}</td>
-                </tr>
-              `).join('')}
-              <tr class="total-row">
-                <td colspan="4" style="text-align: right;">Total Amount:</td>
-                <td style="text-align: right;">৳${quotation.totalAmount.toFixed(2)}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        
-        <div class="footer">
-          <p><strong>Thank you for your interest!</strong></p>
-          <p>This quotation is valid until ${formatDate(quotation.validUntil)}. Contact us to place your order.</p>
-          <p style="margin-top: 10px;">Email: gazilaboratories58@gmail.com | www.gazilaboratories.com</p>
-        </div>
-        
-        <script>window.onload = function() { window.print(); }</script>
-      </body>
-      </html>
-    `;
-
-    printWindow.document.write(html);
-    printWindow.document.close();
+    openQuotationWindow({
+      quotationNumber: quotation.quotationNumber,
+      date: new Date(quotation.date),
+      validUntil: new Date(quotation.validUntil),
+      status: quotation.status,
+      customerName: customer?.name || 'Unknown',
+      customerAddress: customer?.address || undefined,
+      customerPhone: customer?.phone || undefined,
+      sellerName: undefined,
+      storeName: undefined,
+      lines: lineData,
+      subtotal: quotation.totalAmount,
+      discount: 0,
+      discountType: 'AMOUNT',
+      total: quotation.totalAmount,
+    });
   };
 
   const exportToCSV = () => {
