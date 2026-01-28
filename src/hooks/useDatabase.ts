@@ -53,6 +53,7 @@ export type DbSeller = {
   name: string;
   phone: string | null;
   address: string | null;
+  designation: string | null;
   commission_type: 'PERCENTAGE' | 'FIXED';
   commission_value: number;
   active: boolean;
