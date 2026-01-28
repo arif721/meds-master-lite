@@ -8,11 +8,12 @@ interface InvoiceLineData {
   productName: string;
   quantity: number;
   freeQuantity: number;
-  unitPrice: number; // MRP
-  tpRate: number;
+  unitPrice: number; // MRP (for reference)
+  tpRate: number; // Trade Price (billing price)
+  costPrice?: number; // Internal cost (for Office Copy only)
   discountType: 'AMOUNT' | 'PERCENT';
   discountValue: number;
-  lineTotal: number;
+  lineTotal: number; // Based on TP Rate
 }
 
 interface InvoiceData {
@@ -25,6 +26,7 @@ interface InvoiceData {
   getProductName: (productId: string) => string;
   lines?: InvoiceLineData[]; // Enhanced line data
   showTPRate?: boolean; // Toggle to show TP Rate column
+  showCostProfit?: boolean; // Toggle to show Cost Price & Profit (Office Copy only)
   copyType?: 'CUSTOMER' | 'OFFICE'; // Copy type for watermark
 }
 
@@ -38,7 +40,8 @@ export function generateInvoiceHTML(data: InvoiceData): string {
     storeName,
     getProductName,
     lines,
-    showTPRate = true, // Default ON for internal copy
+    showTPRate = true, // Always show TP Rate
+    showCostProfit = false, // Only for Office Copy
     copyType = 'CUSTOMER'
   } = data;
 
@@ -46,8 +49,29 @@ export function generateInvoiceHTML(data: InvoiceData): string {
   const dateStr = formatDate(invoiceDate);
   const timeStr = formatTimeWithSeconds(invoiceDate);
   
-  // Calculate totals
-  const subtotal = invoice.lines.reduce((sum, line) => sum + line.lineTotal, 0);
+  // Calculate totals based on TP Rate
+  const subtotalTP = (lines || []).reduce((sum, line) => {
+    // Calculate TP-based subtotal before line discounts
+    return sum + (line.tpRate * line.quantity);
+  }, 0);
+  
+  const lineDiscountTotal = (lines || []).reduce((sum, line) => {
+    const tpSubtotal = line.tpRate * line.quantity;
+    if (line.discountValue > 0) {
+      if (line.discountType === 'PERCENT') {
+        return sum + (tpSubtotal * line.discountValue / 100);
+      }
+      return sum + line.discountValue;
+    }
+    return sum;
+  }, 0);
+
+  // Calculate total profit for Office Copy
+  const totalProfit = showCostProfit ? (lines || []).reduce((sum, line) => {
+    const profit = ((line.tpRate || 0) - (line.costPrice || 0)) * line.quantity;
+    return sum + profit;
+  }, 0) : 0;
+
   const amountInWords = numberToWords(invoice.totalAmount);
 
   // Generate line items HTML
@@ -58,6 +82,7 @@ export function generateInvoiceHTML(data: InvoiceData): string {
     freeQuantity: line.freeQuantity,
     unitPrice: line.unitPrice,
     tpRate: 0,
+    costPrice: 0,
     discountType: 'AMOUNT' as const,
     discountValue: 0,
     lineTotal: line.lineTotal,
@@ -65,6 +90,9 @@ export function generateInvoiceHTML(data: InvoiceData): string {
     const discountDisplay = line.discountValue > 0 
       ? (line.discountType === 'PERCENT' ? `${line.discountValue}%` : `৳${line.discountValue}`)
       : '-';
+    
+    // Calculate profit per line (for Office Copy)
+    const lineProfit = showCostProfit ? ((line.tpRate || 0) - (line.costPrice || 0)) * line.quantity : 0;
     
     return `
       <tr>
@@ -79,10 +107,14 @@ export function generateInvoiceHTML(data: InvoiceData): string {
           ` : ''}
         </td>
         <td class="align-right currency">৳${line.unitPrice.toLocaleString('en-BD', { minimumFractionDigits: 2 })}</td>
-        ${showTPRate ? `<td class="align-right currency text-muted">৳${line.tpRate.toLocaleString('en-BD', { minimumFractionDigits: 2 })}</td>` : ''}
+        <td class="align-right currency tp-highlight">৳${line.tpRate.toLocaleString('en-BD', { minimumFractionDigits: 2 })}</td>
         <td class="align-center">${line.quantity}${line.freeQuantity > 0 ? ` <span class="text-green">(+${line.freeQuantity})</span>` : ''}</td>
         <td class="align-center text-discount">${discountDisplay}</td>
         <td class="align-right total-cell currency">৳${line.lineTotal.toLocaleString('en-BD', { minimumFractionDigits: 2 })}</td>
+        ${showCostProfit ? `
+          <td class="align-right currency text-muted">৳${(line.costPrice || 0).toLocaleString('en-BD', { minimumFractionDigits: 2 })}</td>
+          <td class="align-right currency ${lineProfit >= 0 ? 'text-profit' : 'text-loss'}">৳${lineProfit.toLocaleString('en-BD', { minimumFractionDigits: 2 })}</td>
+        ` : ''}
       </tr>
     `;
   }).join('');
@@ -355,6 +387,24 @@ export function generateInvoiceHTML(data: InvoiceData): string {
         .text-green {
           color: #059669;
           font-weight: 500;
+        }
+        .text-profit {
+          color: #059669;
+          font-weight: 600;
+        }
+        .text-loss {
+          color: #dc2626;
+          font-weight: 600;
+        }
+        .tp-highlight {
+          color: #1e3a5f;
+          font-weight: 600;
+        }
+        .profit-row {
+          background: #f0fdf4;
+          border-radius: 4px;
+          padding: 8px !important;
+          margin-top: 5px;
         }
         
         /* === SUMMARY SECTION === */
@@ -641,10 +691,11 @@ export function generateInvoiceHTML(data: InvoiceData): string {
                 <th class="align-center" style="width:40px">SL</th>
                 <th>Product</th>
                 <th class="align-right">MRP</th>
-                ${showTPRate ? '<th class="align-right">TP Rate</th>' : ''}
+                <th class="align-right">TP Rate</th>
                 <th class="align-center">Qty</th>
                 <th class="align-center">Discount</th>
-                <th class="align-right">Total</th>
+                <th class="align-right">Total (TP)</th>
+                ${showCostProfit ? '<th class="align-right">Cost</th><th class="align-right">Profit</th>' : ''}
               </tr>
             </thead>
             <tbody>
@@ -669,15 +720,21 @@ export function generateInvoiceHTML(data: InvoiceData): string {
               <span class="payment-label">Paid Amount</span>
               <span class="payment-value currency">৳${invoice.paidAmount.toLocaleString('en-BD', { minimumFractionDigits: 2 })}</span>
             </div>
+            ${showCostProfit ? `
+            <div class="payment-row profit-row">
+              <span class="payment-label">Total Profit</span>
+              <span class="payment-value currency ${totalProfit >= 0 ? 'text-profit' : 'text-loss'}">৳${totalProfit.toLocaleString('en-BD', { minimumFractionDigits: 2 })}</span>
+            </div>
+            ` : ''}
           </div>
           <div class="totals-box">
             <div class="totals-row">
-              <span class="totals-label">Subtotal (MRP)</span>
-              <span class="totals-value">৳${subtotal.toLocaleString('en-BD', { minimumFractionDigits: 2 })}</span>
+              <span class="totals-label">Subtotal (TP)</span>
+              <span class="totals-value">৳${subtotalTP.toLocaleString('en-BD', { minimumFractionDigits: 2 })}</span>
             </div>
             <div class="totals-row">
-              <span class="totals-label">Overall Discount</span>
-              <span class="totals-value discount">-৳${(subtotal - invoice.totalAmount).toLocaleString('en-BD', { minimumFractionDigits: 2 })}</span>
+              <span class="totals-label">Line Discounts</span>
+              <span class="totals-value discount">-৳${lineDiscountTotal.toLocaleString('en-BD', { minimumFractionDigits: 2 })}</span>
             </div>
             <div class="totals-row">
               <span class="totals-label">Net Payable</span>
@@ -752,9 +809,14 @@ export function openInvoiceWindow(data: InvoiceData): void {
   }
 }
 
-// Open Office Copy
+// Open Office Copy - includes Cost Price and Profit
 export function openOfficeCopyWindow(data: InvoiceData): void {
-  const html = generateInvoiceHTML({ ...data, copyType: 'OFFICE', showTPRate: true });
+  const html = generateInvoiceHTML({ 
+    ...data, 
+    copyType: 'OFFICE', 
+    showTPRate: true,
+    showCostProfit: true // Show Cost Price and Profit columns
+  });
   const printWindow = window.open('', '_blank');
   if (printWindow) {
     printWindow.document.write(html);
@@ -762,9 +824,14 @@ export function openOfficeCopyWindow(data: InvoiceData): void {
   }
 }
 
-// Open Customer Copy
+// Open Customer Copy - TP Rate visible, billing based on TP, no Cost/Profit
 export function openCustomerCopyWindow(data: InvoiceData): void {
-  const html = generateInvoiceHTML({ ...data, copyType: 'CUSTOMER', showTPRate: false });
+  const html = generateInvoiceHTML({ 
+    ...data, 
+    copyType: 'CUSTOMER', 
+    showTPRate: true, // Show TP Rate column
+    showCostProfit: false // No Cost Price or Profit
+  });
   const printWindow = window.open('', '_blank');
   if (printWindow) {
     printWindow.document.write(html);
