@@ -163,7 +163,7 @@ export function generateQuotationHTML(data: QuotationData): string {
           top: 20px;
           right: 20px;
           padding: 4px 12px;
-          background: #7c3aed;
+          background: #25343F;
           color: white;
           font-size: 10px;
           font-weight: 600;
@@ -188,7 +188,7 @@ export function generateQuotationHTML(data: QuotationData): string {
         .quotation-title {
           font-size: 32px;
           font-weight: 700;
-          color: #7c3aed;
+          color: #25343F;
           letter-spacing: -0.5px;
           margin-bottom: 10px;
         }
@@ -313,7 +313,7 @@ export function generateQuotationHTML(data: QuotationData): string {
           border-collapse: collapse;
         }
         .items-table thead th {
-          background: #7c3aed;
+          background: #25343F;
           color: white;
           padding: 10px 8px;
           font-size: 10px;
@@ -355,7 +355,7 @@ export function generateQuotationHTML(data: QuotationData): string {
         }
         .items-table tbody td.total-cell {
           font-weight: 600;
-          color: #7c3aed;
+          color: #25343F;
         }
         .currency {
           font-family: 'SF Mono', 'Consolas', monospace;
@@ -393,7 +393,7 @@ export function generateQuotationHTML(data: QuotationData): string {
           font-weight: 500;
         }
         .tp-highlight {
-          color: #7c3aed;
+          color: #25343F;
           font-weight: 600;
         }
         
@@ -412,7 +412,7 @@ export function generateQuotationHTML(data: QuotationData): string {
         }
         .quote-header {
           display: inline-block;
-          background: #7c3aed;
+          background: #25343F;
           color: white;
           padding: 4px 12px;
           font-weight: 600;
@@ -436,7 +436,7 @@ export function generateQuotationHTML(data: QuotationData): string {
           font-weight: 600;
         }
         .quote-value.status {
-          color: #7c3aed;
+          color: #25343F;
         }
         
         .totals-box {
@@ -468,7 +468,7 @@ export function generateQuotationHTML(data: QuotationData): string {
           color: #d97706;
         }
         .totals-row.total-row {
-          background: #7c3aed;
+          background: #25343F;
           margin: 8px -16px -12px;
           padding: 10px 16px;
           border-radius: 0 0 6px 6px;
@@ -487,8 +487,8 @@ export function generateQuotationHTML(data: QuotationData): string {
           z-index: 1;
         }
         .amount-words-box {
-          background: #f5f3ff;
-          border: 1px solid #c4b5fd;
+          background: #f1f5f9;
+          border: 1px solid #94a3b8;
           border-radius: 4px;
           padding: 10px 15px;
         }
@@ -501,7 +501,7 @@ export function generateQuotationHTML(data: QuotationData): string {
         .amount-words-value {
           font-size: 12px;
           font-weight: 600;
-          color: #5b21b6;
+          color: #25343F;
         }
         
         /* === NOTE SECTION === */
@@ -565,7 +565,7 @@ export function generateQuotationHTML(data: QuotationData): string {
         
         /* === FOOTER === */
         .footer {
-          background: linear-gradient(135deg, #ede9fe 0%, #ddd6fe 100%);
+          background: linear-gradient(135deg, #e2e8f0 0%, #cbd5e1 100%);
           padding: 20px 30px;
           margin-top: auto;
           position: relative;
@@ -574,7 +574,7 @@ export function generateQuotationHTML(data: QuotationData): string {
         .footer-title {
           font-size: 18px;
           font-weight: 700;
-          color: #5b21b6;
+          color: #25343F;
           margin-bottom: 6px;
         }
         .footer-text {
@@ -596,7 +596,7 @@ export function generateQuotationHTML(data: QuotationData): string {
         .print-btn {
           display: inline-block;
           padding: 10px 25px;
-          background: #7c3aed;
+          background: #25343F;
           color: white;
           border: none;
           border-radius: 6px;
@@ -606,7 +606,7 @@ export function generateQuotationHTML(data: QuotationData): string {
           margin: 0 5px;
         }
         .print-btn:hover {
-          background: #6d28d9;
+          background: #1a252d;
         }
         .print-btn.secondary {
           background: #64748b;
