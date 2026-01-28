@@ -676,6 +676,7 @@ export function useInvoices() {
       const { data, error } = await supabase
         .from('invoices')
         .select('*')
+        .eq('is_deleted', false)
         .order('created_at', { ascending: false });
       if (error) throw error;
       return data as DbInvoice[];
@@ -913,6 +914,7 @@ export function usePayments() {
       const { data, error } = await supabase
         .from('payments')
         .select('*')
+        .eq('is_deleted', false)
         .order('created_at', { ascending: false });
       if (error) throw error;
       return data as DbPayment[];
