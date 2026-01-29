@@ -915,6 +915,76 @@ export function useConfirmInvoice() {
   });
 }
 
+// Update Invoice (for DRAFT invoices only)
+export function useUpdateInvoice() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      id,
+      invoice,
+      lines,
+    }: {
+      id: string;
+      invoice: Partial<DbInvoice>;
+      lines?: Omit<DbInvoiceLine, 'id' | 'invoice_id'>[];
+    }) => {
+      // Update invoice
+      const { data: invoiceData, error: invoiceError } = await supabase
+        .from('invoices')
+        .update(invoice)
+        .eq('id', id)
+        .select()
+        .single();
+      if (invoiceError) throw invoiceError;
+
+      // If lines provided, replace all lines
+      if (lines) {
+        // Delete existing lines
+        const { error: deleteError } = await supabase
+          .from('invoice_lines')
+          .delete()
+          .eq('invoice_id', id);
+        if (deleteError) throw deleteError;
+
+        // Insert new lines
+        if (lines.length > 0) {
+          const linesWithInvoiceId = lines.map((line) => ({
+            ...line,
+            invoice_id: id,
+          }));
+          const { error: linesError } = await supabase
+            .from('invoice_lines')
+            .insert(linesWithInvoiceId);
+          if (linesError) throw linesError;
+        }
+      }
+
+      await supabase.from('audit_logs').insert({
+        action: 'UPDATE',
+        entity_type: 'INVOICE',
+        entity_id: invoiceData.id,
+        entity_name: invoiceData.invoice_number,
+        changes: invoice,
+      });
+
+      return invoiceData;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      queryClient.invalidateQueries({ queryKey: ['invoice_lines'] });
+      queryClient.invalidateQueries({ queryKey: ['audit_logs'] });
+      toast({ title: 'Invoice updated successfully' });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Error updating invoice',
+        description: error.message,
+        variant: 'destructive',
+      });
+    },
+  });
+}
+
 // ============ PAYMENTS ============
 export function usePayments() {
   return useQuery({
