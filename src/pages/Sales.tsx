@@ -1075,86 +1075,145 @@ export default function Sales() {
         onRowClick={(inv) => setViewInvoice(inv)}
       />
 
-      {/* View Invoice Dialog */}
+      {/* View Invoice Dialog - Fixed Height with Scroll */}
       <Dialog open={!!viewInvoice} onOpenChange={() => setViewInvoice(null)}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Invoice {viewInvoice?.invoice_number}</DialogTitle>
+        <DialogContent className="sm:max-w-2xl max-h-[85vh] flex flex-col p-0">
+          <DialogHeader className="px-6 pt-6 pb-4 border-b flex-shrink-0">
+            <DialogTitle className="flex items-center justify-between">
+              <span className="flex items-center gap-2">
+                <FileText className="w-5 h-5" />
+                Invoice {viewInvoice?.invoice_number}
+              </span>
+              {viewInvoice && (
+                <Badge variant={viewInvoice.status === 'CONFIRMED' || viewInvoice.status === 'PAID' ? 'default' : 'secondary'}>
+                  {viewInvoice.status}
+                </Badge>
+              )}
+            </DialogTitle>
           </DialogHeader>
+          
           {viewInvoice && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <p className="text-muted-foreground">Customer</p>
-                  <p className="font-medium">{getCustomerName(viewInvoice.customer_id)}</p>
+            <>
+              <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+                {/* Invoice Meta Grid */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-muted/50 rounded-lg">
+                  <div>
+                    <p className="text-xs text-muted-foreground">Date</p>
+                    <p className="font-medium">{formatDateOnly(viewInvoice.created_at)}</p>
+                    <p className="text-xs text-muted-foreground">{formatTimeWithSeconds(viewInvoice.created_at)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Customer</p>
+                    <p className="font-medium">{getCustomerName(viewInvoice.customer_id)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Store</p>
+                    <p className="font-medium">{getStoreName(viewInvoice.store_id)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Seller</p>
+                    <p className="font-medium">{getSellerName(viewInvoice.seller_id)}</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-muted-foreground">Store</p>
-                  <p className="font-medium">{getStoreName(viewInvoice.store_id)}</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground">Seller</p>
-                  <p className="font-medium">{getSellerName(viewInvoice.seller_id)}</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground">Date & Time</p>
-                  <p className="font-medium">{formatDateOnly(viewInvoice.created_at)}</p>
-                  <p className="text-xs text-muted-foreground">{formatTimeWithSeconds(viewInvoice.created_at)}</p>
-                </div>
-              </div>
 
-              <div className="border rounded-lg overflow-hidden">
-                <table className="w-full text-sm">
-                  <thead className="bg-muted">
-                    <tr>
-                      <th className="px-3 py-2 text-left">Product</th>
-                      <th className="px-3 py-2 text-right">MRP</th>
-                      <th className="px-3 py-2 text-right">TP Rate</th>
-                      <th className="px-3 py-2 text-right">Qty</th>
-                      <th className="px-3 py-2 text-right">Free</th>
-                      <th className="px-3 py-2 text-right">Total</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {viewInvoice.lines.map((line) => {
-                      const product = dbProducts.find(p => p.id === line.product_id);
-                      return (
-                        <tr key={line.id} className="border-t">
-                          <td className="px-3 py-2">{getProductName(line.product_id)}</td>
-                          <td className="px-3 py-2 text-right text-muted-foreground">{formatCurrency(line.unit_price)}</td>
-                          <td className="px-3 py-2 text-right font-medium">{formatCurrency(line.tp_rate || product?.tp_rate || 0)}</td>
-                          <td className="px-3 py-2 text-right">{line.quantity}</td>
-                          <td className="px-3 py-2 text-right">
-                            {line.free_quantity > 0 ? (
-                              <span className="inline-flex items-center gap-1 text-green-600 dark:text-green-400">
-                                {line.free_quantity}
-                                <span className="text-xs bg-green-100 dark:bg-green-900/30 px-1 rounded">FREE</span>
-                              </span>
-                            ) : '-'}
-                          </td>
-                          <td className="px-3 py-2 text-right font-medium">{formatCurrency(line.total)}</td>
+                {/* Line Items Table */}
+                <div className="border rounded-lg overflow-hidden">
+                  <div className="bg-muted px-3 py-2 text-sm font-medium flex items-center gap-2 border-b">
+                    <Eye className="w-4 h-4" />
+                    Line Items ({viewInvoice.lines.length})
+                  </div>
+                  <div className="max-h-[300px] overflow-y-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-muted/50 sticky top-0">
+                        <tr>
+                          <th className="px-3 py-2 text-left text-xs">SL</th>
+                          <th className="px-3 py-2 text-left text-xs">Product</th>
+                          <th className="px-3 py-2 text-right text-xs">MRP</th>
+                          <th className="px-3 py-2 text-right text-xs">TP Rate</th>
+                          <th className="px-3 py-2 text-center text-xs">Qty</th>
+                          <th className="px-3 py-2 text-center text-xs">Discount</th>
+                          <th className="px-3 py-2 text-right text-xs">Total</th>
                         </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                      </thead>
+                      <tbody>
+                        {viewInvoice.lines.map((line, index) => {
+                          const product = dbProducts.find(p => p.id === line.product_id);
+                          const discountDisplay = line.discount_value > 0 
+                            ? (line.discount_type === 'PERCENT' ? `${line.discount_value}%` : formatCurrency(line.discount_value))
+                            : '-';
+                          return (
+                            <tr key={line.id} className="border-t hover:bg-muted/30">
+                              <td className="px-3 py-2 text-muted-foreground">{index + 1}</td>
+                              <td className="px-3 py-2">
+                                <span className="font-medium">{getProductName(line.product_id)}</span>
+                                {line.free_quantity > 0 && (
+                                  <div className="flex items-center gap-1 mt-0.5">
+                                    <span className="text-xs px-1 py-0.5 rounded bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 font-medium">FREE</span>
+                                    <span className="text-xs text-green-600">+{line.free_quantity}</span>
+                                  </div>
+                                )}
+                              </td>
+                              <td className="px-3 py-2 text-right text-muted-foreground">{formatCurrency(line.unit_price)}</td>
+                              <td className="px-3 py-2 text-right font-medium">{formatCurrency(line.tp_rate || product?.tp_rate || 0)}</td>
+                              <td className="px-3 py-2 text-center">
+                                {line.quantity}
+                                {line.free_quantity > 0 && <span className="text-green-600 ml-1">(+{line.free_quantity})</span>}
+                              </td>
+                              <td className="px-3 py-2 text-center text-orange-600">{discountDisplay}</td>
+                              <td className="px-3 py-2 text-right font-medium">{formatCurrency(line.total)}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Financial Summary */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    {viewInvoice.notes && (
+                      <div className="p-3 bg-muted/50 rounded-lg">
+                        <p className="text-xs text-muted-foreground">Notes</p>
+                        <p className="text-sm">{viewInvoice.notes}</p>
+                      </div>
+                    )}
+                  </div>
+                  <div className="space-y-1 text-right">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Subtotal (TP):</span>
+                      <span className="font-medium">{formatCurrency(viewInvoice.subtotal)}</span>
+                    </div>
+                    {Number(viewInvoice.discount) > 0 && (
+                      <div className="flex justify-between text-sm text-orange-600">
+                        <span>Discount:</span>
+                        <span>-{formatCurrency(viewInvoice.discount)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between font-bold text-lg border-t pt-2 mt-2">
+                      <span>Net Payable:</span>
+                      <span>{formatCurrency(viewInvoice.total)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm text-green-600">
+                      <span>Paid:</span>
+                      <span>{formatCurrency(viewInvoice.paid)}</span>
+                    </div>
+                    <div className="flex justify-between text-base font-semibold text-primary">
+                      <span>Due:</span>
+                      <span>{formatCurrency(viewInvoice.due)}</span>
+                    </div>
+                  </div>
+                </div>
               </div>
 
-              <div className="space-y-1 text-right">
-                <p className="text-sm text-muted-foreground">Subtotal (TP): <span className="font-medium text-foreground">{formatCurrency(viewInvoice.subtotal)}</span></p>
-                <p className="text-sm text-muted-foreground">Discount: <span className="font-medium text-orange-600">-{formatCurrency(viewInvoice.discount)}</span></p>
-                <p>Net Payable: <span className="font-medium">{formatCurrency(viewInvoice.total)}</span></p>
-                <p>Paid: <span className="font-medium text-success">{formatCurrency(viewInvoice.paid)}</span></p>
-                <p className="text-lg">Due: <span className="font-bold text-primary">{formatCurrency(viewInvoice.due)}</span></p>
-              </div>
-
-              <div className="flex justify-end gap-2 flex-wrap">
+              {/* Action Buttons - Fixed at Bottom */}
+              <div className="flex-shrink-0 px-6 py-4 border-t bg-muted/30 flex flex-wrap gap-2 justify-end">
                 {viewInvoice.due > 0 && viewInvoice.status !== 'DRAFT' && (
-                  <Button variant="default" onClick={() => {
+                  <Button onClick={() => {
                     setViewInvoice(null);
                     window.location.href = `/payments?invoice=${viewInvoice.invoice_number}`;
                   }}>
-                    💰 Receive Payment
+                    💰 Receive Payment ({formatCurrency(viewInvoice.due)})
                   </Button>
                 )}
                 <Button variant="outline" onClick={() => printCustomerCopy(viewInvoice)}>
@@ -1162,11 +1221,11 @@ export default function Sales() {
                   Customer Copy
                 </Button>
                 <Button variant="secondary" onClick={() => printOfficeCopy(viewInvoice)}>
-                  <Printer className="w-4 h-4 mr-2" />
+                  <FileText className="w-4 h-4 mr-2" />
                   Office Copy
                 </Button>
               </div>
-            </div>
+            </>
           )}
         </DialogContent>
       </Dialog>
