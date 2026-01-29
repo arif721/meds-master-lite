@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Lock, Mail, AlertCircle, Loader2, UserPlus, LogIn } from 'lucide-react';
+import { Lock, Mail, AlertCircle, Loader2, LogIn } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -16,13 +16,11 @@ const authSchema = z.object({
 
 export default function Auth() {
   const navigate = useNavigate();
-  const { user, loading: authLoading, signIn, signUp } = useAuth();
+  const { user, loading: authLoading, signIn } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [isSignUp, setIsSignUp] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -41,51 +39,26 @@ export default function Auth() {
       return;
     }
 
-    if (isSignUp && password !== confirmPassword) {
-      setError('পাসওয়ার্ড মিলছে না');
-      return;
-    }
-
     setLoading(true);
 
     try {
-      if (isSignUp) {
-        const { error: signUpError } = await signUp(email.trim(), password);
-        
-        if (signUpError) {
-          if (signUpError.message.includes('User already registered')) {
-            setError('এই ইমেইল দিয়ে আগেই অ্যাকাউন্ট আছে');
-          } else {
-            setError(signUpError.message);
-          }
-          return;
+      const { error: signInError } = await signIn(email.trim(), password);
+
+      if (signInError) {
+        if (signInError.message.includes('Invalid login credentials')) {
+          setError('ভুল ইমেইল বা পাসওয়ার্ড');
+        } else if (signInError.message.includes('Email not confirmed')) {
+          setError('ইমেইল ভেরিফাই করা হয়নি');
+        } else {
+          setError(signInError.message);
         }
-
-        toast({
-          title: 'অ্যাকাউন্ট তৈরি হয়েছে',
-          description: 'আপনি এখন লগইন করতে পারবেন',
-        });
-        setIsSignUp(false);
-        setConfirmPassword('');
-      } else {
-        const { error: signInError } = await signIn(email.trim(), password);
-
-        if (signInError) {
-          if (signInError.message.includes('Invalid login credentials')) {
-            setError('ভুল ইমেইল বা পাসওয়ার্ড');
-          } else if (signInError.message.includes('Email not confirmed')) {
-            setError('ইমেইল ভেরিফাই করা হয়নি');
-          } else {
-            setError(signInError.message);
-          }
-          return;
-        }
-
-        toast({
-          title: 'লগইন সফল',
-          description: 'স্বাগতম!',
-        });
+        return;
       }
+
+      toast({
+        title: 'লগইন সফল',
+        description: 'স্বাগতম!',
+      });
     } catch (err) {
       setError('কিছু সমস্যা হয়েছে। আবার চেষ্টা করুন।');
     } finally {
@@ -120,7 +93,7 @@ export default function Auth() {
             </div>
           )}
 
-          {/* Auth Form */}
+          {/* Login Form */}
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
@@ -151,69 +124,25 @@ export default function Auth() {
                   onChange={(e) => setPassword(e.target.value)}
                   className="pl-10"
                   disabled={loading}
-                  autoComplete={isSignUp ? "new-password" : "current-password"}
+                  autoComplete="current-password"
                 />
               </div>
             </div>
-
-            {isSignUp && (
-              <div className="space-y-2">
-                <Label htmlFor="confirmPassword">Confirm Password</Label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                  <Input
-                    id="confirmPassword"
-                    type="password"
-                    placeholder="••••••••"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    className="pl-10"
-                    disabled={loading}
-                    autoComplete="new-password"
-                  />
-                </div>
-              </div>
-            )}
 
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  {isSignUp ? 'অ্যাকাউন্ট তৈরি হচ্ছে...' : 'লগইন হচ্ছে...'}
+                  লগইন হচ্ছে...
                 </>
               ) : (
                 <>
-                  {isSignUp ? (
-                    <>
-                      <UserPlus className="w-4 h-4 mr-2" />
-                      সাইন আপ করুন
-                    </>
-                  ) : (
-                    <>
-                      <LogIn className="w-4 h-4 mr-2" />
-                      লগইন করুন
-                    </>
-                  )}
+                  <LogIn className="w-4 h-4 mr-2" />
+                  লগইন করুন
                 </>
               )}
             </Button>
           </form>
-
-          {/* Toggle between Login and Sign Up */}
-          <div className="mt-6 text-center">
-            <button
-              type="button"
-              onClick={() => {
-                setIsSignUp(!isSignUp);
-                setError('');
-                setConfirmPassword('');
-              }}
-              className="text-sm text-primary hover:underline"
-              disabled={loading}
-            >
-              {isSignUp ? 'আগে থেকে অ্যাকাউন্ট আছে? লগইন করুন' : 'নতুন অ্যাকাউন্ট তৈরি করুন'}
-            </button>
-          </div>
 
           {/* Footer */}
           <div className="mt-8 pt-6 border-t border-border text-center">
