@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { Printer, FileText, Wallet, Package } from 'lucide-react';
+import { Printer, FileText, Wallet, Package, Trash2, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -10,19 +10,34 @@ import {
 } from '@/components/ui/dialog';
 import { Separator } from '@/components/ui/separator';
 import { DataTable } from '@/components/DataTable';
-import { useInvoiceLines, useProducts, useCustomers, useSellers, DbInvoice } from '@/hooks/useDatabase';
+import { useInvoiceLines, useProducts, useCustomers, useSellers, DbInvoice, DbInvoiceLine } from '@/hooks/useDatabase';
 import { useStores } from '@/hooks/useStores';
 import { useSignatures, DbSignature } from '@/hooks/useSignatures';
 import { formatCurrency, formatDateOnly, formatTimeWithSeconds } from '@/lib/format';
 import { openInvoiceWindow } from '@/lib/invoice';
 
+// Extended invoice type with lines
+type InvoiceWithLines = DbInvoice & {
+  lines: DbInvoiceLine[];
+};
+
 interface InvoiceDetailDialogProps {
-  invoice: DbInvoice | null;
+  invoice: InvoiceWithLines | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onDelete?: (invoice: InvoiceWithLines) => void;
+  onRestore?: (invoice: InvoiceWithLines) => void;
+  showDeleted?: boolean;
 }
 
-export function InvoiceDetailDialog({ invoice, open, onOpenChange }: InvoiceDetailDialogProps) {
+export function InvoiceDetailDialog({ 
+  invoice, 
+  open, 
+  onOpenChange,
+  onDelete,
+  onRestore,
+  showDeleted = false,
+}: InvoiceDetailDialogProps) {
   const navigate = useNavigate();
   const { data: allInvoiceLines = [] } = useInvoiceLines();
   const { data: products = [] } = useProducts();
@@ -151,6 +166,9 @@ export function InvoiceDetailDialog({ invoice, open, onOpenChange }: InvoiceDeta
             <span className="flex items-center gap-2">
               <FileText className="w-5 h-5" />
               Invoice #{invoice.invoice_number}
+              {invoice.is_deleted && (
+                <Badge variant="secondary" className="ml-2">Deleted</Badge>
+              )}
             </span>
             <Badge variant={getStatusColor(invoice.status)}>{invoice.status}</Badge>
           </DialogTitle>
@@ -262,21 +280,52 @@ export function InvoiceDetailDialog({ invoice, open, onOpenChange }: InvoiceDeta
         <Separator />
 
         {/* Action Buttons */}
-        <div className="flex flex-wrap gap-2 justify-end">
-          <Button variant="outline" onClick={() => handlePrint('CUSTOMER')}>
-            <Printer className="w-4 h-4 mr-2" />
-            Customer Copy
-          </Button>
-          <Button variant="outline" onClick={() => handlePrint('OFFICE')}>
-            <FileText className="w-4 h-4 mr-2" />
-            Office Copy
-          </Button>
-          {Number(invoice.due) > 0 && invoice.status !== 'DRAFT' && (
-            <Button onClick={handleReceivePayment} className="bg-primary">
-              <Wallet className="w-4 h-4 mr-2" />
-              Receive Payment ({formatCurrency(invoice.due)})
-            </Button>
-          )}
+        <div className="flex flex-wrap gap-2 justify-between">
+          {/* Left side - Delete/Restore buttons */}
+          <div className="flex gap-2">
+            {!showDeleted && onDelete && (
+              <Button 
+                variant="outline" 
+                onClick={() => onDelete(invoice)}
+                className="text-destructive border-destructive hover:bg-destructive/10"
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
+                Delete
+              </Button>
+            )}
+            {showDeleted && onRestore && (
+              <Button 
+                variant="outline" 
+                onClick={() => onRestore(invoice)}
+                className="text-primary border-primary hover:bg-primary/10"
+              >
+                <RotateCcw className="w-4 h-4 mr-2" />
+                Restore
+              </Button>
+            )}
+          </div>
+          
+          {/* Right side - Print/Payment buttons */}
+          <div className="flex flex-wrap gap-2">
+            {!showDeleted && (
+              <>
+                <Button variant="outline" onClick={() => handlePrint('CUSTOMER')}>
+                  <Printer className="w-4 h-4 mr-2" />
+                  Customer Copy
+                </Button>
+                <Button variant="outline" onClick={() => handlePrint('OFFICE')}>
+                  <FileText className="w-4 h-4 mr-2" />
+                  Office Copy
+                </Button>
+                {Number(invoice.due) > 0 && invoice.status !== 'DRAFT' && (
+                  <Button onClick={handleReceivePayment} className="bg-primary">
+                    <Wallet className="w-4 h-4 mr-2" />
+                    Receive Payment ({formatCurrency(invoice.due)})
+                  </Button>
+                )}
+              </>
+            )}
+          </div>
         </div>
       </DialogContent>
     </Dialog>
