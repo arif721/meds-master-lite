@@ -56,6 +56,17 @@ export default function Inventory() {
     cost_price: '',
   });
 
+  // Auto-fill Unit Cost from Product's Cost Price when product is selected
+  const handleProductChange = (productId: string) => {
+    const selectedProduct = products.find((p) => p.id === productId);
+    setFormData((prev) => ({
+      ...prev,
+      product_id: productId,
+      // Auto-fill cost_price from product's cost_price, but keep editable
+      cost_price: selectedProduct ? selectedProduct.cost_price.toString() : prev.cost_price,
+    }));
+  };
+
   const activeProducts = products.filter((p) => p.active && !(p as any).is_deleted);
 
   const getProductName = (productId: string) => {
@@ -215,7 +226,7 @@ export default function Inventory() {
                   <Label htmlFor="product">Product *</Label>
                   <Select
                     value={formData.product_id}
-                    onValueChange={(value) => setFormData({ ...formData, product_id: value })}
+                    onValueChange={handleProductChange}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Select product" />
@@ -223,11 +234,21 @@ export default function Inventory() {
                     <SelectContent className="bg-popover max-h-60">
                       {activeProducts.map((product) => (
                         <SelectItem key={product.id} value={product.id}>
-                          {product.name}
+                          <div className="flex items-center justify-between w-full gap-4">
+                            <span>{product.name}</span>
+                            <span className="text-xs text-muted-foreground">
+                              Cost: ৳{product.cost_price}
+                            </span>
+                          </div>
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
+                  {formData.product_id && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Unit Cost auto-filled from product's Cost Price
+                    </p>
+                  )}
                 </div>
 
                 <div className="input-group">
@@ -275,6 +296,9 @@ export default function Inventory() {
                       placeholder="0.00"
                       required
                     />
+                    <p className="text-xs text-muted-foreground">
+                      Editable if batch cost differs from product cost
+                    </p>
                   </div>
                 </div>
 
