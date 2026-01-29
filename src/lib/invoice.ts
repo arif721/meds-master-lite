@@ -1,5 +1,5 @@
 // Professional Invoice PDF Generator with TP Rate, Discount, and Amount in Words
-// Supports A4 pagination with proper header/footer handling
+// Supports A4 pagination with proper header/footer handling - Max 10 items per page
 
 import { SalesInvoice } from '@/types';
 import { formatCurrency, formatDate, formatTimeWithSeconds, numberToWords } from './format';
@@ -36,6 +36,8 @@ interface InvoiceData {
   representativeSignatureUrl?: string;
 }
 
+const MAX_ITEMS_PER_PAGE = 10;
+
 export function generateInvoiceHTML(data: InvoiceData): string {
   const { 
     invoice, 
@@ -59,13 +61,26 @@ export function generateInvoiceHTML(data: InvoiceData): string {
   const dateStr = formatDate(invoiceDate);
   const timeStr = formatTimeWithSeconds(invoiceDate);
   
+  // Get all lines
+  const allLines = lines || invoice.lines.map(line => ({
+    id: line.id,
+    productName: getProductName(line.productId),
+    quantity: line.quantity,
+    freeQuantity: line.freeQuantity,
+    unitPrice: line.unitPrice,
+    tpRate: 0,
+    costPrice: 0,
+    discountType: 'AMOUNT' as const,
+    discountValue: 0,
+    lineTotal: line.lineTotal,
+  }));
+
   // Calculate totals based on TP Rate
-  const subtotalTP = (lines || []).reduce((sum, line) => {
-    // Calculate TP-based subtotal before line discounts
+  const subtotalTP = allLines.reduce((sum, line) => {
     return sum + (line.tpRate * line.quantity);
   }, 0);
   
-  const lineDiscountTotal = (lines || []).reduce((sum, line) => {
+  const lineDiscountTotal = allLines.reduce((sum, line) => {
     const tpSubtotal = line.tpRate * line.quantity;
     if (line.discountValue > 0) {
       if (line.discountType === 'PERCENT') {
@@ -77,8 +92,7 @@ export function generateInvoiceHTML(data: InvoiceData): string {
   }, 0);
 
   // Calculate total profit for Office Copy
-  // Correct formula: Profit = (TP × Paid Qty - Line Discount) - Cost × (Paid + Free)
-  const totalProfit = showCostProfit ? (lines || []).reduce((sum, line) => {
+  const totalProfit = showCostProfit ? allLines.reduce((sum, line) => {
     const tpSubtotal = (line.tpRate || 0) * line.quantity;
     let lineDiscount = 0;
     if (line.discountValue > 0) {
@@ -96,67 +110,64 @@ export function generateInvoiceHTML(data: InvoiceData): string {
 
   const amountInWords = numberToWords(invoice.totalAmount);
 
-  // Generate line items HTML
-  const lineItemsHTML = (lines || invoice.lines.map(line => ({
-    id: line.id,
-    productName: getProductName(line.productId),
-    quantity: line.quantity,
-    freeQuantity: line.freeQuantity,
-    unitPrice: line.unitPrice,
-    tpRate: 0,
-    costPrice: 0,
-    discountType: 'AMOUNT' as const,
-    discountValue: 0,
-    lineTotal: line.lineTotal,
-  }))).map((line, index) => {
-    const discountDisplay = line.discountValue > 0 
-      ? (line.discountType === 'PERCENT' ? `${line.discountValue}%` : `৳${line.discountValue}`)
-      : '-';
-    
-    // Calculate profit per line (for Office Copy)
-    // Correct formula: Profit = (TP × Paid Qty - Line Discount) - Cost × (Paid + Free)
-    let lineProfit = 0;
-    if (showCostProfit) {
-      const tpSubtotal = (line.tpRate || 0) * line.quantity;
-      let lineDiscountAmt = 0;
-      if (line.discountValue > 0) {
-        if (line.discountType === 'PERCENT') {
-          lineDiscountAmt = tpSubtotal * line.discountValue / 100;
-        } else {
-          lineDiscountAmt = line.discountValue;
-        }
-      }
-      const netSales = tpSubtotal - lineDiscountAmt;
-      const totalCost = (line.costPrice || 0) * (line.quantity + (line.freeQuantity || 0));
-      lineProfit = netSales - totalCost;
-    }
-    
-    return `
-      <tr class="product-row">
-        <td class="align-center">${index + 1}</td>
-        <td class="product-name">
-          ${line.productName}
-          ${line.freeQuantity > 0 ? `
-            <div class="free-line">
-              <span class="free-badge">FREE</span>
-              <span class="free-qty">+${line.freeQuantity} free</span>
-            </div>
-          ` : ''}
-        </td>
-        <td class="align-right currency">৳${line.unitPrice.toLocaleString('en-BD', { minimumFractionDigits: 2 })}</td>
-        <td class="align-right currency tp-highlight">৳${line.tpRate.toLocaleString('en-BD', { minimumFractionDigits: 2 })}</td>
-        <td class="align-center">${line.quantity}${line.freeQuantity > 0 ? ` <span class="text-green">(+${line.freeQuantity})</span>` : ''}</td>
-        <td class="align-center text-discount">${discountDisplay}</td>
-        <td class="align-right total-cell currency">৳${line.lineTotal.toLocaleString('en-BD', { minimumFractionDigits: 2 })}</td>
-        ${showCostProfit ? `
-          <td class="align-right currency text-muted">৳${(line.costPrice || 0).toLocaleString('en-BD', { minimumFractionDigits: 2 })}</td>
-          <td class="align-right currency ${lineProfit >= 0 ? 'text-profit' : 'text-loss'}">৳${lineProfit.toLocaleString('en-BD', { minimumFractionDigits: 2 })}</td>
-        ` : ''}
-      </tr>
-    `;
-  }).join('');
+  // Paginate lines - max 10 per page
+  const totalPages = Math.ceil(allLines.length / MAX_ITEMS_PER_PAGE);
+  const paginatedLines: InvoiceLineData[][] = [];
+  for (let i = 0; i < allLines.length; i += MAX_ITEMS_PER_PAGE) {
+    paginatedLines.push(allLines.slice(i, i + MAX_ITEMS_PER_PAGE));
+  }
 
-  // Table header HTML (reusable for continuation pages)
+  // Generate line items HTML for a page
+  const generateLineItemsHTML = (pageLines: InvoiceLineData[], startIndex: number) => {
+    return pageLines.map((line, index) => {
+      const discountDisplay = line.discountValue > 0 
+        ? (line.discountType === 'PERCENT' ? `${line.discountValue}%` : `৳${line.discountValue}`)
+        : '-';
+      
+      // Calculate profit per line (for Office Copy)
+      let lineProfit = 0;
+      if (showCostProfit) {
+        const tpSubtotal = (line.tpRate || 0) * line.quantity;
+        let lineDiscountAmt = 0;
+        if (line.discountValue > 0) {
+          if (line.discountType === 'PERCENT') {
+            lineDiscountAmt = tpSubtotal * line.discountValue / 100;
+          } else {
+            lineDiscountAmt = line.discountValue;
+          }
+        }
+        const netSales = tpSubtotal - lineDiscountAmt;
+        const totalCost = (line.costPrice || 0) * (line.quantity + (line.freeQuantity || 0));
+        lineProfit = netSales - totalCost;
+      }
+      
+      return `
+        <tr class="product-row">
+          <td class="align-center">${startIndex + index + 1}</td>
+          <td class="product-name">
+            ${line.productName}
+            ${line.freeQuantity > 0 ? `
+              <div class="free-line">
+                <span class="free-badge">FREE</span>
+                <span class="free-qty">+${line.freeQuantity} free</span>
+              </div>
+            ` : ''}
+          </td>
+          <td class="align-right currency">৳${line.unitPrice.toLocaleString('en-BD', { minimumFractionDigits: 2 })}</td>
+          <td class="align-right currency tp-highlight">৳${line.tpRate.toLocaleString('en-BD', { minimumFractionDigits: 2 })}</td>
+          <td class="align-center">${line.quantity}${line.freeQuantity > 0 ? ` <span class="text-green">(+${line.freeQuantity})</span>` : ''}</td>
+          <td class="align-center text-discount">${discountDisplay}</td>
+          <td class="align-right total-cell currency">৳${line.lineTotal.toLocaleString('en-BD', { minimumFractionDigits: 2 })}</td>
+          ${showCostProfit ? `
+            <td class="align-right currency text-muted">৳${(line.costPrice || 0).toLocaleString('en-BD', { minimumFractionDigits: 2 })}</td>
+            <td class="align-right currency ${lineProfit >= 0 ? 'text-profit' : 'text-loss'}">৳${lineProfit.toLocaleString('en-BD', { minimumFractionDigits: 2 })}</td>
+          ` : ''}
+        </tr>
+      `;
+    }).join('');
+  };
+
+  // Table header HTML
   const tableHeaderHTML = `
     <tr>
       <th class="align-center" style="width:40px">SL</th>
@@ -168,6 +179,286 @@ export function generateInvoiceHTML(data: InvoiceData): string {
       <th class="align-right">Total (TP)</th>
       ${showCostProfit ? '<th class="align-right">Cost</th><th class="align-right">Profit</th>' : ''}
     </tr>
+  `;
+
+  // Generate pages HTML
+  const generatePagesHTML = () => {
+    if (totalPages <= 1) {
+      // Single page - show everything
+      return `
+        <div class="page">
+          <!-- Full Header for Page 1 -->
+          <div class="header">
+            <div class="header-left">
+              <div class="invoice-title">Invoice</div>
+              <div class="invoice-meta">
+                <div class="invoice-meta-row">
+                  <span class="invoice-meta-label">Invoice No:</span>
+                  <span class="invoice-meta-value">${invoice.invoiceNumber}</span>
+                </div>
+                <div class="invoice-meta-row">
+                  <span class="invoice-meta-label">Date:</span>
+                  <span class="invoice-meta-value">${dateStr}</span>
+                </div>
+                <div class="invoice-meta-row">
+                  <span class="invoice-meta-label">Time:</span>
+                  <span class="invoice-meta-value">${timeStr}</span>
+                </div>
+                ${storeName ? `
+                <div class="invoice-meta-row">
+                  <span class="invoice-meta-label">Store:</span>
+                  <span class="invoice-meta-value">${storeName}</span>
+                </div>
+                ` : ''}
+              </div>
+            </div>
+            <div class="header-right">
+              <div class="logo-container">
+                <img src="/favicon.svg" alt="Gazi Laboratories" />
+                <div class="company-info">
+                  <div class="company-name">Gazi Laboratories Ltd.</div>
+                  <div class="company-address">Islamiahat, Hathazari, Chattogram</div>
+                  <div class="company-phone">+880 1987-501700</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Billing Section -->
+          <div class="billing-section">
+            <div class="billing-box bill-from">
+              <div class="billing-header">Bill From</div>
+              <div class="billing-content">
+                ${sellerName ? `
+                <div class="billing-name">${sellerName}</div>
+                ${sellerDesignation ? `<div class="billing-detail">${sellerDesignation}</div>` : ''}
+                ${sellerPhone ? `<div class="billing-phone">${sellerPhone}</div>` : ''}
+                ` : '<div class="billing-detail text-muted">No seller assigned</div>'}
+              </div>
+            </div>
+            <div class="billing-box bill-to">
+              <div class="billing-header">Bill To</div>
+              <div class="billing-content">
+                <div class="billing-name">${customerName || 'N/A'}</div>
+                ${customerAddress ? `<div class="billing-detail">${customerAddress}</div>` : ''}
+                ${customerPhone ? `<div class="billing-phone">${customerPhone}</div>` : ''}
+              </div>
+            </div>
+          </div>
+          
+          <!-- Items Table -->
+          <div class="table-container">
+            <table class="items-table">
+              <thead>${tableHeaderHTML}</thead>
+              <tbody>${generateLineItemsHTML(allLines, 0)}</tbody>
+            </table>
+          </div>
+          
+          ${generateSummaryHTML()}
+          ${generateSignaturesHTML()}
+          ${generateFooterHTML()}
+          
+          <div class="page-number">Page 1 of 1</div>
+        </div>
+      `;
+    }
+
+    // Multi-page invoice
+    return paginatedLines.map((pageLines, pageIndex) => {
+      const isFirstPage = pageIndex === 0;
+      const isLastPage = pageIndex === totalPages - 1;
+      const startIndex = pageIndex * MAX_ITEMS_PER_PAGE;
+
+      return `
+        <div class="page ${!isFirstPage ? 'continuation-page' : ''}">
+          ${isFirstPage ? `
+            <!-- Full Header for Page 1 -->
+            <div class="header">
+              <div class="header-left">
+                <div class="invoice-title">Invoice</div>
+                <div class="invoice-meta">
+                  <div class="invoice-meta-row">
+                    <span class="invoice-meta-label">Invoice No:</span>
+                    <span class="invoice-meta-value">${invoice.invoiceNumber}</span>
+                  </div>
+                  <div class="invoice-meta-row">
+                    <span class="invoice-meta-label">Date:</span>
+                    <span class="invoice-meta-value">${dateStr}</span>
+                  </div>
+                  <div class="invoice-meta-row">
+                    <span class="invoice-meta-label">Time:</span>
+                    <span class="invoice-meta-value">${timeStr}</span>
+                  </div>
+                  ${storeName ? `
+                  <div class="invoice-meta-row">
+                    <span class="invoice-meta-label">Store:</span>
+                    <span class="invoice-meta-value">${storeName}</span>
+                  </div>
+                  ` : ''}
+                </div>
+              </div>
+              <div class="header-right">
+                <div class="logo-container">
+                  <img src="/favicon.svg" alt="Gazi Laboratories" />
+                  <div class="company-info">
+                    <div class="company-name">Gazi Laboratories Ltd.</div>
+                    <div class="company-address">Islamiahat, Hathazari, Chattogram</div>
+                    <div class="company-phone">+880 1987-501700</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <!-- Billing Section (Page 1 only) -->
+            <div class="billing-section">
+              <div class="billing-box bill-from">
+                <div class="billing-header">Bill From</div>
+                <div class="billing-content">
+                  ${sellerName ? `
+                  <div class="billing-name">${sellerName}</div>
+                  ${sellerDesignation ? `<div class="billing-detail">${sellerDesignation}</div>` : ''}
+                  ${sellerPhone ? `<div class="billing-phone">${sellerPhone}</div>` : ''}
+                  ` : '<div class="billing-detail text-muted">No seller assigned</div>'}
+                </div>
+              </div>
+              <div class="billing-box bill-to">
+                <div class="billing-header">Bill To</div>
+                <div class="billing-content">
+                  <div class="billing-name">${customerName || 'N/A'}</div>
+                  ${customerAddress ? `<div class="billing-detail">${customerAddress}</div>` : ''}
+                  ${customerPhone ? `<div class="billing-phone">${customerPhone}</div>` : ''}
+                </div>
+              </div>
+            </div>
+          ` : `
+            <!-- Continuation Header for Page 2+ -->
+            <div class="continuation-header">
+              <div class="continuation-left">
+                <img src="/favicon.svg" alt="Gazi Laboratories" class="continuation-logo" />
+                <div class="continuation-company">
+                  <div class="company-name">Gazi Laboratories Ltd.</div>
+                  <div class="company-address">Islamiahat, Hathazari, Chattogram</div>
+                </div>
+              </div>
+              <div class="continuation-right">
+                <div class="continuation-invoice">Invoice: ${invoice.invoiceNumber}</div>
+                <div class="continuation-date">${dateStr}</div>
+              </div>
+            </div>
+          `}
+          
+          <!-- Items Table -->
+          <div class="table-container">
+            <table class="items-table">
+              <thead>${tableHeaderHTML}</thead>
+              <tbody>${generateLineItemsHTML(pageLines, startIndex)}</tbody>
+            </table>
+          </div>
+          
+          ${isLastPage ? `
+            ${generateSummaryHTML()}
+            ${generateSignaturesHTML()}
+            ${generateFooterHTML()}
+          ` : ''}
+          
+          <div class="page-number">Page ${pageIndex + 1} of ${totalPages}</div>
+        </div>
+      `;
+    }).join('<div class="page-break"></div>');
+  };
+
+  const generateSummaryHTML = () => `
+    <div class="summary-section">
+      <div class="payment-info">
+        <div class="payment-header">Payment Info</div>
+        <div class="payment-row">
+          <span class="payment-label">Status</span>
+          <span class="payment-value status">${['CONFIRMED', 'PAID', 'PARTIAL'].includes(invoice.status) ? 'Confirmed' : invoice.status}</span>
+        </div>
+        <div class="payment-row">
+          <span class="payment-label">Seller</span>
+          <span class="payment-value">${sellerName || 'N/A'}</span>
+        </div>
+        <div class="payment-row">
+          <span class="payment-label">Paid Amount</span>
+          <span class="payment-value currency">৳${invoice.paidAmount.toLocaleString('en-BD', { minimumFractionDigits: 2 })}</span>
+        </div>
+        ${showCostProfit ? `
+        <div class="profit-summary">
+          <div class="profit-row">
+            <span class="profit-label">Total Profit</span>
+            <span class="profit-value">৳${totalProfit.toLocaleString('en-BD', { minimumFractionDigits: 2 })}</span>
+          </div>
+        </div>
+        ` : ''}
+      </div>
+      <div class="totals-box">
+        <div class="totals-row">
+          <span class="totals-label">Subtotal (TP)</span>
+          <span class="totals-value">৳${subtotalTP.toLocaleString('en-BD', { minimumFractionDigits: 2 })}</span>
+        </div>
+        <div class="totals-row">
+          <span class="totals-label">Line Discounts</span>
+          <span class="totals-value discount">-৳${lineDiscountTotal.toLocaleString('en-BD', { minimumFractionDigits: 2 })}</span>
+        </div>
+        <div class="totals-row">
+          <span class="totals-label">Net Payable</span>
+          <span class="totals-value">৳${invoice.totalAmount.toLocaleString('en-BD', { minimumFractionDigits: 2 })}</span>
+        </div>
+        <div class="totals-row">
+          <span class="totals-label">Paid</span>
+          <span class="totals-value">৳${invoice.paidAmount.toLocaleString('en-BD', { minimumFractionDigits: 2 })}</span>
+        </div>
+        <div class="totals-row due-row">
+          <span class="totals-label">Due</span>
+          <span class="totals-value">৳${invoice.dueAmount.toLocaleString('en-BD', { minimumFractionDigits: 2 })}</span>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Amount in Words -->
+    <div class="amount-words">
+      <div class="amount-words-box">
+        <div class="amount-words-label">Amount in Words</div>
+        <div class="amount-words-value">${amountInWords}</div>
+      </div>
+    </div>
+  `;
+
+  const generateSignaturesHTML = () => `
+    <div class="signatures-section">
+      <div class="signature-box">
+        <div class="signature-space"></div>
+        <div class="signature-line"></div>
+        <div class="signature-label">Customer Signature</div>
+      </div>
+      <div class="signature-box">
+        ${representativeSignatureUrl ? `
+        <div class="signature-space">
+          <img src="${representativeSignatureUrl}" alt="Representative Signature" class="signature-image" />
+        </div>
+        ` : '<div class="signature-space"></div>'}
+        <div class="signature-line"></div>
+        <div class="signature-label">Representative Signature</div>
+        ${sellerName ? `<div class="signature-name">(${sellerName})</div>` : ''}
+      </div>
+      <div class="signature-box">
+        ${preparedBySignatureUrl ? `
+        <div class="signature-space">
+          <img src="${preparedBySignatureUrl}" alt="Prepared By Signature" class="signature-image" />
+        </div>
+        ` : '<div class="signature-space"></div>'}
+        <div class="signature-line"></div>
+        <div class="signature-label">Prepared By</div>
+      </div>
+    </div>
+  `;
+
+  const generateFooterHTML = () => `
+    <div class="footer">
+      <div class="footer-text">Thank you for your business with Gazi Laboratories Ltd.</div>
+      <div class="footer-contact">Email: gazilaboratories58@gmail.com | Phone: +880 1987-501700</div>
+    </div>
   `;
 
   return `
@@ -205,6 +496,19 @@ export function generateInvoiceHTML(data: InvoiceData): string {
           position: relative;
         }
         
+        /* === PAGE STRUCTURE === */
+        .page {
+          position: relative;
+          min-height: 277mm; /* A4 height minus margins */
+          padding-bottom: 60px;
+        }
+        .page-break {
+          page-break-after: always;
+          height: 1px;
+          margin: 20px 0;
+          border-bottom: 2px dashed #e2e8f0;
+        }
+        
         /* === WATERMARK === */
         .watermark {
           position: fixed;
@@ -217,29 +521,6 @@ export function generateInvoiceHTML(data: InvoiceData): string {
           pointer-events: none;
           z-index: 0;
           white-space: nowrap;
-        }
-        
-        /* === PAGE STRUCTURE FOR PRINT === */
-        .page-header {
-          display: table-header-group;
-        }
-        .page-header-content {
-          padding: 15px 20px 10px;
-          border-bottom: 2px solid #e2e8f0;
-          position: relative;
-        }
-        .page-footer {
-          display: table-footer-group;
-        }
-        .page-footer-content {
-          padding: 5px 20px;
-          text-align: center;
-          font-size: 10px;
-          color: #64748b;
-          border-top: 1px solid #e2e8f0;
-        }
-        .page-body {
-          display: table-row-group;
         }
         
         /* === TOP BAR === */
@@ -338,7 +619,39 @@ export function generateInvoiceHTML(data: InvoiceData): string {
         
         /* === CONTINUATION HEADER (for page 2+) === */
         .continuation-header {
-          display: none;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 12px 20px;
+          border-bottom: 2px solid #e2e8f0;
+          background: #f8fafc;
+        }
+        .continuation-left {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+        }
+        .continuation-logo {
+          width: 50px;
+          height: auto;
+        }
+        .continuation-company .company-name {
+          font-size: 12px;
+        }
+        .continuation-company .company-address {
+          font-size: 9px;
+        }
+        .continuation-right {
+          text-align: right;
+        }
+        .continuation-invoice {
+          font-size: 12px;
+          font-weight: 700;
+          color: #1e3a5f;
+        }
+        .continuation-date {
+          font-size: 10px;
+          color: #64748b;
         }
         
         /* === BILLING SECTION === */
@@ -513,7 +826,7 @@ export function generateInvoiceHTML(data: InvoiceData): string {
           break-inside: avoid;
         }
         
-        /* === SUMMARY SECTION (Last page only) === */
+        /* === SUMMARY SECTION === */
         .summary-section {
           display: flex;
           justify-content: space-between;
@@ -714,11 +1027,14 @@ export function generateInvoiceHTML(data: InvoiceData): string {
         
         /* === PAGE NUMBER === */
         .page-number {
-          position: fixed;
-          bottom: 5mm;
-          right: 15mm;
-          font-size: 9px;
+          position: absolute;
+          bottom: 10px;
+          right: 20px;
+          font-size: 10px;
           color: #64748b;
+          background: white;
+          padding: 2px 8px;
+          border-radius: 3px;
         }
         
         /* === PRINT BUTTON === */
@@ -760,13 +1076,25 @@ export function generateInvoiceHTML(data: InvoiceData): string {
             box-shadow: none;
             max-width: 100%;
           }
+          .page-break {
+            display: none;
+            page-break-after: always;
+          }
+          .page {
+            page-break-after: always;
+            min-height: auto;
+          }
+          .page:last-child {
+            page-break-after: avoid;
+          }
           .top-bar,
           .items-table thead th,
           .billing-header,
           .payment-header,
           .totals-row.due-row,
           .copy-badge,
-          .free-badge {
+          .free-badge,
+          .continuation-header {
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
           }
@@ -791,7 +1119,6 @@ export function generateInvoiceHTML(data: InvoiceData): string {
             break-inside: avoid;
           }
           
-          /* Page number styling */
           .page-number {
             position: fixed;
             bottom: 5mm;
@@ -799,14 +1126,20 @@ export function generateInvoiceHTML(data: InvoiceData): string {
           }
         }
         
-        /* === SCREEN PREVIEW PAGINATION === */
+        /* === SCREEN PREVIEW === */
         @media screen {
-          .page-number {
-            position: relative;
-            text-align: center;
-            padding: 10px;
-            border-top: 1px dashed #e2e8f0;
-            margin-top: 10px;
+          .page-break {
+            height: 30px;
+            background: #e2e8f0;
+            margin: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            color: #64748b;
+          }
+          .page-break::after {
+            content: '— Page Break —';
           }
         }
       </style>
@@ -817,183 +1150,13 @@ export function generateInvoiceHTML(data: InvoiceData): string {
         <div class="top-bar"></div>
         <div class="copy-badge">${copyType === 'OFFICE' ? 'Office Copy' : 'Customer Copy'}</div>
         
-        <!-- Header Section (Page 1) -->
-        <div class="header">
-          <div class="header-left">
-            <div class="invoice-title">Invoice</div>
-            <div class="invoice-meta">
-              <div class="invoice-meta-row">
-                <span class="invoice-meta-label">Invoice No:</span>
-                <span class="invoice-meta-value">${invoice.invoiceNumber}</span>
-              </div>
-              <div class="invoice-meta-row">
-                <span class="invoice-meta-label">Date:</span>
-                <span class="invoice-meta-value">${dateStr}</span>
-              </div>
-              <div class="invoice-meta-row">
-                <span class="invoice-meta-label">Time:</span>
-                <span class="invoice-meta-value">${timeStr}</span>
-              </div>
-              ${storeName ? `
-              <div class="invoice-meta-row">
-                <span class="invoice-meta-label">Store:</span>
-                <span class="invoice-meta-value">${storeName}</span>
-              </div>
-              ` : ''}
-            </div>
-          </div>
-          <div class="header-right">
-            <div class="logo-container">
-              <img src="/favicon.svg" alt="Gazi Laboratories" />
-              <div class="company-info">
-                <div class="company-name">Gazi Laboratories Ltd.</div>
-                <div class="company-address">Islamiahat, Hathazari, Chattogram</div>
-                <div class="company-phone">+880 1987-501700</div>
-              </div>
-            </div>
-          </div>
-        </div>
-        
-        <!-- Billing Section (Page 1 only) -->
-        <div class="billing-section">
-          <div class="billing-box bill-from">
-            <div class="billing-header">Bill From</div>
-            <div class="billing-content">
-              ${sellerName ? `
-              <div class="billing-name">${sellerName}</div>
-              ${sellerDesignation ? `<div class="billing-detail">${sellerDesignation}</div>` : ''}
-              ${sellerPhone ? `<div class="billing-phone">${sellerPhone}</div>` : ''}
-              ` : '<div class="billing-detail text-muted">No seller assigned</div>'}
-            </div>
-          </div>
-          <div class="billing-box bill-to">
-            <div class="billing-header">Bill To</div>
-            <div class="billing-content">
-              <div class="billing-name">${customerName || 'N/A'}</div>
-              ${customerAddress ? `<div class="billing-detail">${customerAddress}</div>` : ''}
-              ${customerPhone ? `<div class="billing-phone">${customerPhone}</div>` : ''}
-            </div>
-          </div>
-        </div>
-        
-        <!-- Items Table -->
-        <div class="table-container">
-          <table class="items-table">
-            <thead>
-              ${tableHeaderHTML}
-            </thead>
-            <tbody>
-              ${lineItemsHTML}
-            </tbody>
-          </table>
-        </div>
-        
-        <!-- Summary Section (Last Page only) -->
-        <div class="summary-section">
-          <div class="payment-info">
-            <div class="payment-header">Payment Info</div>
-            <div class="payment-row">
-              <span class="payment-label">Status</span>
-              <span class="payment-value status">${['CONFIRMED', 'PAID', 'PARTIAL'].includes(invoice.status) ? 'Confirmed' : invoice.status}</span>
-            </div>
-            <div class="payment-row">
-              <span class="payment-label">Seller</span>
-              <span class="payment-value">${sellerName || 'N/A'}</span>
-            </div>
-            <div class="payment-row">
-              <span class="payment-label">Paid Amount</span>
-              <span class="payment-value currency">৳${invoice.paidAmount.toLocaleString('en-BD', { minimumFractionDigits: 2 })}</span>
-            </div>
-            ${showCostProfit ? `
-            <div class="profit-summary">
-              <div class="profit-row">
-                <span class="profit-label">Total Profit</span>
-                <span class="profit-value">৳${totalProfit.toLocaleString('en-BD', { minimumFractionDigits: 2 })}</span>
-              </div>
-            </div>
-            ` : ''}
-          </div>
-          <div class="totals-box">
-            <div class="totals-row">
-              <span class="totals-label">Subtotal (TP)</span>
-              <span class="totals-value">৳${subtotalTP.toLocaleString('en-BD', { minimumFractionDigits: 2 })}</span>
-            </div>
-            <div class="totals-row">
-              <span class="totals-label">Line Discounts</span>
-              <span class="totals-value discount">-৳${lineDiscountTotal.toLocaleString('en-BD', { minimumFractionDigits: 2 })}</span>
-            </div>
-            <div class="totals-row">
-              <span class="totals-label">Net Payable</span>
-              <span class="totals-value">৳${invoice.totalAmount.toLocaleString('en-BD', { minimumFractionDigits: 2 })}</span>
-            </div>
-            <div class="totals-row">
-              <span class="totals-label">Paid</span>
-              <span class="totals-value">৳${invoice.paidAmount.toLocaleString('en-BD', { minimumFractionDigits: 2 })}</span>
-            </div>
-            <div class="totals-row due-row">
-              <span class="totals-label">Due</span>
-              <span class="totals-value">৳${invoice.dueAmount.toLocaleString('en-BD', { minimumFractionDigits: 2 })}</span>
-            </div>
-          </div>
-        </div>
-        
-        <!-- Amount in Words -->
-        <div class="amount-words">
-          <div class="amount-words-box">
-            <div class="amount-words-label">Amount in Words</div>
-            <div class="amount-words-value">${amountInWords}</div>
-          </div>
-        </div>
-        
-        <!-- Signatures Section -->
-        <div class="signatures-section">
-          <div class="signature-box">
-            <div class="signature-space"></div>
-            <div class="signature-line"></div>
-            <div class="signature-label">Customer Signature</div>
-          </div>
-          <div class="signature-box">
-            ${representativeSignatureUrl ? `
-            <div class="signature-space">
-              <img src="${representativeSignatureUrl}" alt="Representative Signature" class="signature-image" />
-            </div>
-            ` : '<div class="signature-space"></div>'}
-            <div class="signature-line"></div>
-            <div class="signature-label">Representative Signature</div>
-            ${sellerName ? `<div class="signature-name">(${sellerName})</div>` : ''}
-          </div>
-          <div class="signature-box">
-            ${preparedBySignatureUrl ? `
-            <div class="signature-space">
-              <img src="${preparedBySignatureUrl}" alt="Prepared By Signature" class="signature-image" />
-            </div>
-            ` : '<div class="signature-space"></div>'}
-            <div class="signature-line"></div>
-            <div class="signature-label">Prepared By</div>
-          </div>
-        </div>
-        
-        <!-- Footer -->
-        <div class="footer">
-          <div class="footer-text">Thank you for your business with Gazi Laboratories Ltd.</div>
-          <div class="footer-contact">Email: gazilaboratories58@gmail.com | Phone: +880 1987-501700</div>
-        </div>
+        ${generatePagesHTML()}
       </div>
       
       <div class="print-actions">
         <button class="print-btn" onclick="window.print()">🖨️ Print Invoice</button>
         <button class="print-btn secondary" onclick="window.close()">✕ Close</button>
       </div>
-      
-      <script>
-        // Page numbering script for print
-        (function() {
-          // This runs after print to update page numbers
-          window.onbeforeprint = function() {
-            // Page numbers are handled by CSS counters in print
-          };
-        })();
-      </script>
     </body>
     </html>
   `;
