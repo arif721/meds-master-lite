@@ -263,10 +263,9 @@ export function generateInvoiceHTML(data: InvoiceData): string {
       `;
     }
 
-    // Multi-page invoice
+    // Multi-page invoice - EVERY PAGE has the same layout with Summary, Signatures, Footer
     return paginatedLines.map((pageLines, pageIndex) => {
       const isFirstPage = pageIndex === 0;
-      const isLastPage = pageIndex === totalPages - 1;
       const startIndex = pageIndex * MAX_ITEMS_PER_PAGE;
 
       return `
@@ -355,11 +354,10 @@ export function generateInvoiceHTML(data: InvoiceData): string {
             </table>
           </div>
           
-          ${isLastPage ? `
-            ${generateSummaryHTML()}
-            ${generateSignaturesHTML()}
-            ${generateFooterHTML()}
-          ` : ''}
+          <!-- Payment Info, Summary, Amount in Words, Signatures, Footer - EVERY PAGE -->
+          ${generateSummaryHTML()}
+          ${generateSignaturesHTML()}
+          ${generateFooterHTML()}
           
           <div class="page-number">Page ${pageIndex + 1} of ${totalPages}</div>
         </div>
