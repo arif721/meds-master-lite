@@ -630,22 +630,26 @@ export function generateQuotationHTML(data: QuotationData): string {
           margin-top: auto;
           position: relative;
           z-index: 1;
+          text-align: center;
         }
         .footer-title {
           font-size: 18px;
           font-weight: 700;
           color: #25343F;
           margin-bottom: 6px;
+          text-align: center;
         }
         .footer-text {
           font-size: 11px;
           color: #475569;
           line-height: 1.5;
+          text-align: center;
         }
         .footer-contact {
           margin-top: 6px;
           font-size: 10px;
           color: #64748b;
+          text-align: center;
         }
         
         /* === PRINT BUTTON === */
