@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Plus, Search, FileText, Eye, Printer, Trash2, Loader2, AlertTriangle } from 'lucide-react';
+import { Plus, Search, FileText, Eye, Printer, Trash2, Loader2, AlertTriangle, Pencil, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { DataTable } from '@/components/DataTable';
@@ -10,6 +10,9 @@ import { formatCurrency, formatDate, formatDateOnly, formatTimeWithSeconds, isEx
 import { AdminGreetingClock } from '@/components/AdminGreetingClock';
 import { InvoiceDetailDialog } from '@/components/InvoiceDetailDialog';
 import { openInvoiceWindow, openCustomerCopyWindow, openOfficeCopyWindow } from '@/lib/invoice';
+import { TrashToggle } from '@/components/TrashToggle';
+import { SoftDeleteDialog, RestoreDialog, PermanentDeleteDialog } from '@/components/DeleteConfirmDialogs';
+import { useSoftDelete, useRestore, usePermanentDelete } from '@/hooks/useSoftDelete';
 import {
   Dialog,
   DialogContent,
@@ -60,6 +63,17 @@ export default function Sales() {
   const [viewInvoice, setViewInvoice] = useState<InvoiceWithLines | null>(null);
   const [dateRange, setDateRange] = useState<DateRange>({ from: undefined, to: undefined });
   const [creditWarningAcknowledged, setCreditWarningAcknowledged] = useState(false);
+  const [showDeleted, setShowDeleted] = useState(false);
+  
+  // Delete dialog states
+  const [softDeleteTarget, setSoftDeleteTarget] = useState<InvoiceWithLines | null>(null);
+  const [restoreTarget, setRestoreTarget] = useState<InvoiceWithLines | null>(null);
+  const [permanentDeleteTarget, setPermanentDeleteTarget] = useState<InvoiceWithLines | null>(null);
+  
+  // Soft delete hooks
+  const softDeleteMutation = useSoftDelete('invoices');
+  const restoreMutation = useRestore('invoices');
+  const permanentDeleteMutation = usePermanentDelete('invoices');
 
   // Combine invoices with their lines
   const invoicesWithLines = useMemo(() => {
@@ -99,9 +113,16 @@ export default function Sales() {
   const activeSellers = dbSellers.filter((s: DbSeller) => s.active);
   const activeProducts = dbProducts.filter((p) => p.active);
 
-  // Filter invoices by search and date range
+  // Filter invoices by search, date range, and deleted status
   const filteredInvoices = useMemo(() => {
     return invoicesWithLines.filter((inv) => {
+      // Deleted status filter
+      if (showDeleted) {
+        if (!inv.is_deleted) return false;
+      } else {
+        if (inv.is_deleted) return false;
+      }
+      
       // Search filter
       const matchesSearch = 
         inv.invoice_number.toLowerCase().includes(search.toLowerCase()) ||
@@ -122,7 +143,36 @@ export default function Sales() {
 
       return true;
     });
-  }, [invoicesWithLines, search, dateRange, customers]);
+  }, [invoicesWithLines, search, dateRange, customers, showDeleted]);
+  
+  // Count deleted invoices for trash toggle
+  const deletedCount = useMemo(() => {
+    return invoicesWithLines.filter(inv => inv.is_deleted).length;
+  }, [invoicesWithLines]);
+  
+  // Handle soft delete
+  const handleSoftDelete = (invoice: InvoiceWithLines) => {
+    softDeleteMutation.mutate(
+      { id: invoice.id, name: invoice.invoice_number },
+      { onSuccess: () => setSoftDeleteTarget(null) }
+    );
+  };
+  
+  // Handle restore
+  const handleRestore = (invoice: InvoiceWithLines) => {
+    restoreMutation.mutate(
+      { id: invoice.id, name: invoice.invoice_number },
+      { onSuccess: () => setRestoreTarget(null) }
+    );
+  };
+  
+  // Handle permanent delete
+  const handlePermanentDelete = (invoice: InvoiceWithLines) => {
+    permanentDeleteMutation.mutate(
+      { id: invoice.id, name: invoice.invoice_number },
+      { onSuccess: () => setPermanentDeleteTarget(null) }
+    );
+  };
 
   const getCustomerName = (customerId: string) => {
     return customers.find((c) => c.id === customerId)?.name || 'Unknown';
@@ -967,14 +1017,21 @@ export default function Sales() {
         onExportPDF={() => exportToPDF()}
       />
 
-      {/* Search */}
-      <div className="relative max-w-md">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <Input
-          placeholder="Search by invoice number or customer..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="pl-10"
+      {/* Search + Trash Toggle */}
+      <div className="flex items-center gap-4 justify-between">
+        <div className="relative max-w-md flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input
+            placeholder="Search by invoice number or customer..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-10"
+          />
+        </div>
+        <TrashToggle
+          showDeleted={showDeleted}
+          onToggle={setShowDeleted}
+          deletedCount={deletedCount}
         />
       </div>
 
@@ -988,6 +1045,9 @@ export default function Sales() {
               <div className="flex items-center gap-2">
                 <FileText className="w-4 h-4 text-muted-foreground" />
                 <span className="font-medium">{inv.invoice_number}</span>
+                {inv.is_deleted && (
+                  <Badge variant="secondary" className="text-xs">Deleted</Badge>
+                )}
               </div>
             ),
           },
@@ -1046,25 +1106,64 @@ export default function Sales() {
             header: 'Actions',
             render: (inv) => (
               <div className="flex items-center gap-1">
-                <Button variant="ghost" size="icon" onClick={() => setViewInvoice(inv)} title="View Details">
+                <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); setViewInvoice(inv); }} title="View Details">
                   <Eye className="w-4 h-4" />
                 </Button>
-                <Button variant="ghost" size="icon" onClick={() => printCustomerCopy(inv)} title="Print Customer Copy">
-                  <Printer className="w-4 h-4" />
-                </Button>
-                <Button variant="ghost" size="icon" onClick={() => printOfficeCopy(inv)} title="Print Office Copy">
-                  <FileText className="w-4 h-4 text-muted-foreground" />
-                </Button>
-                {inv.status === 'DRAFT' && (
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    onClick={() => handleConfirm(inv.id)}
-                    disabled={confirmInvoiceMutation.isPending}
-                  >
-                    {confirmInvoiceMutation.isPending ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : null}
-                    Confirm
-                  </Button>
+                
+                {/* Actions for Active Invoices */}
+                {!showDeleted && (
+                  <>
+                    <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); printCustomerCopy(inv); }} title="Print Customer Copy">
+                      <Printer className="w-4 h-4" />
+                    </Button>
+                    <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); printOfficeCopy(inv); }} title="Print Office Copy">
+                      <FileText className="w-4 h-4 text-muted-foreground" />
+                    </Button>
+                    {inv.status === 'DRAFT' && (
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={(e) => { e.stopPropagation(); handleConfirm(inv.id); }}
+                        disabled={confirmInvoiceMutation.isPending}
+                      >
+                        {confirmInvoiceMutation.isPending ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : null}
+                        Confirm
+                      </Button>
+                    )}
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      onClick={(e) => { e.stopPropagation(); setSoftDeleteTarget(inv); }} 
+                      title="Delete"
+                      className="text-destructive hover:text-destructive"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </>
+                )}
+                
+                {/* Actions for Deleted Invoices (Trash) */}
+                {showDeleted && (
+                  <>
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      onClick={(e) => { e.stopPropagation(); setRestoreTarget(inv); }} 
+                      title="Restore"
+                      className="text-primary hover:text-primary"
+                    >
+                      <RotateCcw className="w-4 h-4" />
+                    </Button>
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      onClick={(e) => { e.stopPropagation(); setPermanentDeleteTarget(inv); }} 
+                      title="Permanent Delete"
+                      className="text-destructive hover:text-destructive"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </>
                 )}
               </div>
             ),
@@ -1072,7 +1171,7 @@ export default function Sales() {
         ]}
         data={filteredInvoices.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())}
         keyExtractor={(inv) => inv.id}
-        emptyMessage="No invoices found"
+        emptyMessage={showDeleted ? "Trash is empty" : "No invoices found"}
         onRowClick={(inv) => setViewInvoice(inv)}
       />
 
@@ -1081,6 +1180,44 @@ export default function Sales() {
         invoice={viewInvoice}
         open={!!viewInvoice}
         onOpenChange={(open) => !open && setViewInvoice(null)}
+        onDelete={(inv) => {
+          setViewInvoice(null);
+          setSoftDeleteTarget(inv);
+        }}
+        onRestore={(inv) => {
+          setViewInvoice(null);
+          setRestoreTarget(inv);
+        }}
+        showDeleted={showDeleted}
+      />
+      
+      {/* Soft Delete Dialog */}
+      <SoftDeleteDialog
+        open={!!softDeleteTarget}
+        onOpenChange={(open) => !open && setSoftDeleteTarget(null)}
+        itemName={softDeleteTarget?.invoice_number || ''}
+        onConfirm={() => softDeleteTarget && handleSoftDelete(softDeleteTarget)}
+        isPending={softDeleteMutation.isPending}
+      />
+      
+      {/* Restore Dialog */}
+      <RestoreDialog
+        open={!!restoreTarget}
+        onOpenChange={(open) => !open && setRestoreTarget(null)}
+        itemName={restoreTarget?.invoice_number || ''}
+        onConfirm={() => restoreTarget && handleRestore(restoreTarget)}
+        isPending={restoreMutation.isPending}
+      />
+      
+      {/* Permanent Delete Dialog */}
+      <PermanentDeleteDialog
+        open={!!permanentDeleteTarget}
+        onOpenChange={(open) => !open && setPermanentDeleteTarget(null)}
+        itemName={permanentDeleteTarget?.invoice_number || ''}
+        itemId={permanentDeleteTarget?.id || ''}
+        table="invoices"
+        onConfirm={() => permanentDeleteTarget && handlePermanentDelete(permanentDeleteTarget)}
+        isPending={permanentDeleteMutation.isPending}
       />
     </div>
   );

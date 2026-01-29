@@ -93,6 +93,9 @@ export type DbInvoice = {
   due: number;
   notes: string | null;
   created_at: string;
+  is_deleted?: boolean;
+  deleted_at?: string | null;
+  deleted_by?: string | null;
 };
 
 export type DbInvoiceLine = {
@@ -679,10 +682,10 @@ export function useInvoices() {
   return useQuery({
     queryKey: ['invoices'],
     queryFn: async () => {
+      // Fetch all invoices (including soft-deleted) - filtering done on client
       const { data, error } = await supabase
         .from('invoices')
         .select('*')
-        .eq('is_deleted', false)
         .order('created_at', { ascending: false });
       if (error) throw error;
       return data as DbInvoice[];

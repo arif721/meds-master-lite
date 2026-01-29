@@ -15,7 +15,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useStore as useStoreById, PAYMENT_TERMS_LABELS } from '@/hooks/useStores';
-import { useInvoices, useInvoiceLines, usePayments, useProducts, DbInvoice } from '@/hooks/useDatabase';
+import { useInvoices, useInvoiceLines, usePayments, useProducts, DbInvoice, DbInvoiceLine } from '@/hooks/useDatabase';
 import { formatCurrency, formatDateOnly, formatTimeWithSeconds } from '@/lib/format';
 import { startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, isWithinInterval, parseISO, format } from 'date-fns';
 import { Calendar } from '@/components/ui/calendar';
@@ -42,7 +42,7 @@ export default function StoreDetails() {
   });
   const [invoiceSearch, setInvoiceSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [selectedInvoice, setSelectedInvoice] = useState<DbInvoice | null>(null);
+  const [selectedInvoice, setSelectedInvoice] = useState<(DbInvoice & { lines: DbInvoiceLine[] }) | null>(null);
   const [invoiceDialogOpen, setInvoiceDialogOpen] = useState(false);
 
   // Calculate date range based on preset
@@ -166,9 +166,11 @@ export default function StoreDetails() {
 
   const mostSoldProduct = topProducts[0];
 
-  // Filtered invoices for Invoices tab
+  // Filtered invoices for Invoices tab (with lines attached)
   const filteredInvoices = useMemo(() => {
     return storeInvoices.filter((inv) => {
+      // Exclude deleted invoices
+      if (inv.is_deleted) return false;
       // Search filter
       if (invoiceSearch && !inv.invoice_number.toLowerCase().includes(invoiceSearch.toLowerCase())) {
         return false;
@@ -178,8 +180,11 @@ export default function StoreDetails() {
         return false;
       }
       return true;
-    });
-  }, [storeInvoices, invoiceSearch, statusFilter]);
+    }).map(inv => ({
+      ...inv,
+      lines: allInvoiceLines.filter(line => line.invoice_id === inv.id)
+    }));
+  }, [storeInvoices, invoiceSearch, statusFilter, allInvoiceLines]);
 
   // Products summary for Products tab
   // Products summary for Products tab (only confirmed invoices)
