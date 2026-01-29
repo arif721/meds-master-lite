@@ -314,6 +314,16 @@ export default function Sales() {
       return;
     }
 
+    // CRITICAL: Seller is MANDATORY for invoice creation
+    if (!formData.sellerId) {
+      toast({
+        title: 'Seller Required',
+        description: 'Please select a seller/representative. Invoice cannot be created without seller.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     if (formData.lines.length === 0) {
       toast({
         title: 'No Products',
