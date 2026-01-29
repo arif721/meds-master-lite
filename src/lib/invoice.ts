@@ -245,6 +245,7 @@ export function generateInvoiceHTML(data: InvoiceData): string {
         .logo-container img {
           width: 130px;
           height: auto;
+          transform: translate(10px, -10px);
         }
         .company-info {
           text-align: left;
