@@ -76,8 +76,20 @@ export function generateInvoiceHTML(data: InvoiceData): string {
   }, 0);
 
   // Calculate total profit for Office Copy
+  // Correct formula: Profit = (TP × Paid Qty - Line Discount) - Cost × (Paid + Free)
   const totalProfit = showCostProfit ? (lines || []).reduce((sum, line) => {
-    const profit = ((line.tpRate || 0) - (line.costPrice || 0)) * line.quantity;
+    const tpSubtotal = (line.tpRate || 0) * line.quantity;
+    let lineDiscount = 0;
+    if (line.discountValue > 0) {
+      if (line.discountType === 'PERCENT') {
+        lineDiscount = tpSubtotal * line.discountValue / 100;
+      } else {
+        lineDiscount = line.discountValue;
+      }
+    }
+    const netSales = tpSubtotal - lineDiscount;
+    const totalCost = (line.costPrice || 0) * (line.quantity + (line.freeQuantity || 0));
+    const profit = netSales - totalCost;
     return sum + profit;
   }, 0) : 0;
 
@@ -101,7 +113,22 @@ export function generateInvoiceHTML(data: InvoiceData): string {
       : '-';
     
     // Calculate profit per line (for Office Copy)
-    const lineProfit = showCostProfit ? ((line.tpRate || 0) - (line.costPrice || 0)) * line.quantity : 0;
+    // Correct formula: Profit = (TP × Paid Qty - Line Discount) - Cost × (Paid + Free)
+    let lineProfit = 0;
+    if (showCostProfit) {
+      const tpSubtotal = (line.tpRate || 0) * line.quantity;
+      let lineDiscountAmt = 0;
+      if (line.discountValue > 0) {
+        if (line.discountType === 'PERCENT') {
+          lineDiscountAmt = tpSubtotal * line.discountValue / 100;
+        } else {
+          lineDiscountAmt = line.discountValue;
+        }
+      }
+      const netSales = tpSubtotal - lineDiscountAmt;
+      const totalCost = (line.costPrice || 0) * (line.quantity + (line.freeQuantity || 0));
+      lineProfit = netSales - totalCost;
+    }
     
     return `
       <tr>
