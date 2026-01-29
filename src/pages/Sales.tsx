@@ -9,6 +9,7 @@ import { useSignatures, DbSignature } from '@/hooks/useSignatures';
 import { formatCurrency, formatDate, formatDateOnly, formatTimeWithSeconds, isExpired, generateInvoiceNumber } from '@/lib/format';
 import { AdminGreetingClock } from '@/components/AdminGreetingClock';
 import { InvoiceDetailDialog } from '@/components/InvoiceDetailDialog';
+import { InvoiceEditDialog } from '@/components/InvoiceEditDialog';
 import { openInvoiceWindow, openCustomerCopyWindow, openOfficeCopyWindow } from '@/lib/invoice';
 import { TrashToggle } from '@/components/TrashToggle';
 import { SoftDeleteDialog, RestoreDialog, PermanentDeleteDialog } from '@/components/DeleteConfirmDialogs';
@@ -61,6 +62,7 @@ export default function Sales() {
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [viewInvoice, setViewInvoice] = useState<InvoiceWithLines | null>(null);
+  const [editInvoice, setEditInvoice] = useState<InvoiceWithLines | null>(null);
   const [dateRange, setDateRange] = useState<DateRange>({ from: undefined, to: undefined });
   const [creditWarningAcknowledged, setCreditWarningAcknowledged] = useState(false);
   const [showDeleted, setShowDeleted] = useState(false);
@@ -1113,6 +1115,17 @@ export default function Sales() {
                 {/* Actions for Active Invoices */}
                 {!showDeleted && (
                   <>
+                    {/* Edit Button - Only for DRAFT */}
+                    {inv.status === 'DRAFT' && (
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        onClick={(e) => { e.stopPropagation(); setEditInvoice(inv); }} 
+                        title="Edit Invoice"
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </Button>
+                    )}
                     <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); printCustomerCopy(inv); }} title="Print Customer Copy">
                       <Printer className="w-4 h-4" />
                     </Button>
@@ -1188,7 +1201,18 @@ export default function Sales() {
           setViewInvoice(null);
           setRestoreTarget(inv);
         }}
+        onEdit={(inv) => {
+          setViewInvoice(null);
+          setEditInvoice(inv);
+        }}
         showDeleted={showDeleted}
+      />
+      
+      {/* Edit Invoice Dialog */}
+      <InvoiceEditDialog
+        invoice={editInvoice}
+        open={!!editInvoice}
+        onOpenChange={(open) => !open && setEditInvoice(null)}
       />
       
       {/* Soft Delete Dialog */}

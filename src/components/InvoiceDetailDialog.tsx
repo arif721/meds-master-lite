@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { Printer, FileText, Wallet, Package, Trash2, RotateCcw } from 'lucide-react';
+import { Printer, FileText, Wallet, Package, Trash2, RotateCcw, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -27,6 +27,7 @@ interface InvoiceDetailDialogProps {
   onOpenChange: (open: boolean) => void;
   onDelete?: (invoice: InvoiceWithLines) => void;
   onRestore?: (invoice: InvoiceWithLines) => void;
+  onEdit?: (invoice: InvoiceWithLines) => void;
   showDeleted?: boolean;
 }
 
@@ -36,6 +37,7 @@ export function InvoiceDetailDialog({
   onOpenChange,
   onDelete,
   onRestore,
+  onEdit,
   showDeleted = false,
 }: InvoiceDetailDialogProps) {
   const navigate = useNavigate();
@@ -281,8 +283,17 @@ export function InvoiceDetailDialog({
 
         {/* Action Buttons */}
         <div className="flex flex-wrap gap-2 justify-between">
-          {/* Left side - Delete/Restore buttons */}
+          {/* Left side - Edit/Delete/Restore buttons */}
           <div className="flex gap-2">
+            {!showDeleted && invoice.status === 'DRAFT' && onEdit && (
+              <Button 
+                variant="outline" 
+                onClick={() => onEdit(invoice)}
+              >
+                <Pencil className="w-4 h-4 mr-2" />
+                Edit
+              </Button>
+            )}
             {!showDeleted && onDelete && (
               <Button 
                 variant="outline" 
