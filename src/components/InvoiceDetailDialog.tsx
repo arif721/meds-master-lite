@@ -132,6 +132,7 @@ export function InvoiceDetailDialog({
       sellerDesignation: seller?.designation || undefined,
       sellerPhone: seller?.phone || undefined,
       storeName: store?.name,
+      customerCode: (store as any)?.customer_code || undefined,
       getProductName: (productId: string) => {
         const product = products.find(p => p.id === productId);
         return product?.name || 'Unknown Product';

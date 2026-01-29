@@ -14,6 +14,7 @@ export type DbStore = {
   active: boolean;
   created_at: string;
   updated_at: string;
+  customer_code?: string | null; // Auto-generated unique ID (GL-0001, GL-0002, etc.)
 };
 
 export const PAYMENT_TERMS_LABELS: Record<string, string> = {

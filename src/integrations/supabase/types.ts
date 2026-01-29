@@ -956,6 +956,7 @@ export type Database = {
           contact_person: string | null
           created_at: string
           credit_limit: number
+          customer_code: string | null
           deleted_at: string | null
           deleted_by: string | null
           id: string
@@ -971,6 +972,7 @@ export type Database = {
           contact_person?: string | null
           created_at?: string
           credit_limit?: number
+          customer_code?: string | null
           deleted_at?: string | null
           deleted_by?: string | null
           id?: string
@@ -986,6 +988,7 @@ export type Database = {
           contact_person?: string | null
           created_at?: string
           credit_limit?: number
+          customer_code?: string | null
           deleted_at?: string | null
           deleted_by?: string | null
           id?: string
@@ -1002,7 +1005,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      generate_customer_code: { Args: never; Returns: string }
     }
     Enums: {
       adjustment_type:

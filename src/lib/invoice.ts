@@ -26,6 +26,7 @@ interface InvoiceData {
   sellerDesignation?: string;
   sellerPhone?: string;
   storeName?: string;
+  customerCode?: string; // Unique Customer ID (GL-XXXX)
   getProductName: (productId: string) => string;
   lines?: InvoiceLineData[]; // Enhanced line data
   showTPRate?: boolean; // Toggle to show TP Rate column
@@ -48,6 +49,7 @@ export function generateInvoiceHTML(data: InvoiceData): string {
     sellerDesignation,
     sellerPhone,
     storeName,
+    customerCode,
     getProductName,
     lines,
     showTPRate = true, // Always show TP Rate
@@ -204,10 +206,10 @@ export function generateInvoiceHTML(data: InvoiceData): string {
                   <span class="invoice-meta-label">Time:</span>
                   <span class="invoice-meta-value">${timeStr}</span>
                 </div>
-                ${storeName ? `
+                ${customerCode ? `
                 <div class="invoice-meta-row">
-                  <span class="invoice-meta-label">Store:</span>
-                  <span class="invoice-meta-value">${storeName}</span>
+                  <span class="invoice-meta-label">Customer ID:</span>
+                  <span class="invoice-meta-value">${customerCode}</span>
                 </div>
                 ` : ''}
               </div>
@@ -288,10 +290,10 @@ export function generateInvoiceHTML(data: InvoiceData): string {
                     <span class="invoice-meta-label">Time:</span>
                     <span class="invoice-meta-value">${timeStr}</span>
                   </div>
-                  ${storeName ? `
+                  ${customerCode ? `
                   <div class="invoice-meta-row">
-                    <span class="invoice-meta-label">Store:</span>
-                    <span class="invoice-meta-value">${storeName}</span>
+                    <span class="invoice-meta-label">Customer ID:</span>
+                    <span class="invoice-meta-value">${customerCode}</span>
                   </div>
                   ` : ''}
                 </div>
