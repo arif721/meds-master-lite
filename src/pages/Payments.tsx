@@ -1,13 +1,16 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Plus, Search, CreditCard, Wallet, Smartphone, FileText, Printer, Loader2 } from 'lucide-react';
+import { Plus, Search, CreditCard, Wallet, Smartphone, FileText, Printer, Loader2, Trash2, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { DataTable } from '@/components/DataTable';
 import { useInvoices, usePayments, useAddPayment, useCustomers, DbPayment, DbInvoice } from '@/hooks/useDatabase';
 import { useStores } from '@/hooks/useStores';
+import { useSoftDelete, useRestore, usePermanentDelete } from '@/hooks/useSoftDelete';
 import { formatCurrency, formatDate, formatDateOnly, formatTimeWithSeconds } from '@/lib/format';
 import { openReceiptWindow } from '@/lib/receipt';
+import { TrashToggle } from '@/components/TrashToggle';
+import { SoftDeleteDialog, RestoreDialog, PermanentDeleteDialog } from '@/components/DeleteConfirmDialogs';
 import {
   Dialog,
   DialogContent,
@@ -27,6 +30,15 @@ import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/hooks/use-toast';
 
 type PaymentMethod = 'CASH' | 'BANK' | 'BKASH' | 'NAGAD' | 'CHECK' | 'OTHER';
+
+type PaymentWithInfo = DbPayment & {
+  invoice?: DbInvoice;
+  customer?: { id: string; name: string };
+  store?: { id: string; name: string };
+  is_deleted?: boolean;
+  deleted_at?: string | null;
+  deleted_by?: string | null;
+};
 
 const paymentMethods: { value: PaymentMethod; label: string; icon: typeof CreditCard }[] = [
   { value: 'CASH', label: 'Cash', icon: Wallet },
@@ -50,8 +62,19 @@ export default function Payments() {
   
   const addPaymentMutation = useAddPayment();
   
+  // Soft delete hooks
+  const softDeleteMutation = useSoftDelete('payments');
+  const restoreMutation = useRestore('payments');
+  const permanentDeleteMutation = usePermanentDelete('payments');
+  
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [showDeleted, setShowDeleted] = useState(false);
+  
+  // Delete dialog states
+  const [softDeleteTarget, setSoftDeleteTarget] = useState<PaymentWithInfo | null>(null);
+  const [restoreTarget, setRestoreTarget] = useState<PaymentWithInfo | null>(null);
+  const [permanentDeleteTarget, setPermanentDeleteTarget] = useState<PaymentWithInfo | null>(null);
 
   const [formData, setFormData] = useState({
     invoiceId: '',
@@ -83,7 +106,7 @@ export default function Payments() {
   }, [invoiceFromUrl, unpaidInvoices, invoicesLoading, setSearchParams]);
 
   // Enrich payments with invoice and customer info for display
-  const enrichedPayments = useMemo(() => {
+  const enrichedPayments = useMemo((): PaymentWithInfo[] => {
     return dbPayments.map(payment => {
       const invoice = dbInvoices.find(inv => inv.id === payment.invoice_id);
       const customer = invoice ? customers.find(c => c.id === invoice.customer_id) : null;
@@ -91,21 +114,33 @@ export default function Payments() {
       return {
         ...payment,
         invoice,
-        customer,
-        store,
+        customer: customer ? { id: customer.id, name: customer.name } : undefined,
+        store: store ? { id: store.id, name: store.name } : undefined,
       };
     });
   }, [dbPayments, dbInvoices, customers, stores]);
 
+  // Separate active and deleted payments
+  const activePayments = useMemo(() => 
+    enrichedPayments.filter(p => !(p as any).is_deleted), 
+    [enrichedPayments]
+  );
+  
+  const deletedPayments = useMemo(() => 
+    enrichedPayments.filter(p => (p as any).is_deleted), 
+    [enrichedPayments]
+  );
+
   const filteredPayments = useMemo(() => {
-    return enrichedPayments.filter((payment) => {
+    const paymentsToFilter = showDeleted ? deletedPayments : activePayments;
+    return paymentsToFilter.filter((payment) => {
       return (
         payment.invoice?.invoice_number?.toLowerCase().includes(search.toLowerCase()) ||
         payment.customer?.name?.toLowerCase().includes(search.toLowerCase()) ||
         payment.store?.name?.toLowerCase().includes(search.toLowerCase())
       );
     });
-  }, [enrichedPayments, search]);
+  }, [activePayments, deletedPayments, search, showDeleted]);
 
   const getInvoiceLabel = (invoice: DbInvoice | undefined) => {
     if (!invoice) return 'Unknown';
@@ -115,6 +150,30 @@ export default function Payments() {
 
   const getSelectedInvoice = () => {
     return dbInvoices.find((inv) => inv.id === formData.invoiceId);
+  };
+
+  // Handle soft delete
+  const handleSoftDelete = (payment: PaymentWithInfo) => {
+    softDeleteMutation.mutate(
+      { id: payment.id, name: `Payment ৳${payment.amount} for ${payment.invoice?.invoice_number || 'Unknown'}` },
+      { onSuccess: () => setSoftDeleteTarget(null) }
+    );
+  };
+  
+  // Handle restore
+  const handleRestore = (payment: PaymentWithInfo) => {
+    restoreMutation.mutate(
+      { id: payment.id, name: `Payment ৳${payment.amount}` },
+      { onSuccess: () => setRestoreTarget(null) }
+    );
+  };
+  
+  // Handle permanent delete
+  const handlePermanentDelete = (payment: PaymentWithInfo) => {
+    permanentDeleteMutation.mutate(
+      { id: payment.id, name: `Payment ৳${payment.amount}` },
+      { onSuccess: () => setPermanentDeleteTarget(null) }
+    );
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -189,7 +248,7 @@ export default function Payments() {
     return <Icon className="w-4 h-4" />;
   };
 
-  const handlePrintReceipt = (payment: typeof enrichedPayments[0]) => {
+  const handlePrintReceipt = (payment: PaymentWithInfo) => {
     const receiptPayment = {
       id: payment.id,
       invoiceId: payment.invoice_id,
@@ -226,115 +285,131 @@ export default function Payments() {
           <h1 className="page-title">Payments</h1>
           <p className="text-muted-foreground">Record and track customer payments</p>
         </div>
-        <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) resetForm(); }}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="w-4 h-4 mr-2" />
-              Receive Payment
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle>Receive Payment</DialogTitle>
-            </DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="input-group">
-                <Label>Select Invoice *</Label>
-                <Select
-                  value={formData.invoiceId}
-                  onValueChange={(value) => setFormData({ ...formData, invoiceId: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select unpaid invoice" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-popover">
-                    {unpaidInvoices.map((inv) => (
-                      <SelectItem key={inv.id} value={inv.id}>
-                        {getInvoiceLabel(inv)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+        <div className="flex items-center gap-2">
+          <TrashToggle 
+            showDeleted={showDeleted} 
+            onToggle={setShowDeleted} 
+            deletedCount={deletedPayments.length} 
+          />
+          <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) resetForm(); }}>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="w-4 h-4 mr-2" />
+                Receive Payment
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle>Receive Payment</DialogTitle>
+              </DialogHeader>
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div className="input-group">
+                  <Label>Select Invoice *</Label>
+                  <Select
+                    value={formData.invoiceId}
+                    onValueChange={(value) => setFormData({ ...formData, invoiceId: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select unpaid invoice" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-popover">
+                      {unpaidInvoices.map((inv) => (
+                        <SelectItem key={inv.id} value={inv.id}>
+                          {getInvoiceLabel(inv)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
 
-              {formData.invoiceId && (
-                <div className="p-3 bg-muted/50 rounded-lg">
-                  <div className="grid grid-cols-2 gap-2 text-sm">
-                    <div>
-                      <p className="text-muted-foreground">Total Amount</p>
-                      <p className="font-medium">{formatCurrency(getSelectedInvoice()?.total || 0)}</p>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground">Already Paid</p>
-                      <p className="font-medium text-success">{formatCurrency(getSelectedInvoice()?.paid || 0)}</p>
-                    </div>
-                    <div className="col-span-2">
-                      <p className="text-muted-foreground">Due Amount</p>
-                      <p className="text-lg font-bold text-primary">{formatCurrency(getSelectedInvoice()?.due || 0)}</p>
+                {formData.invoiceId && (
+                  <div className="p-3 bg-muted/50 rounded-lg">
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      <div>
+                        <p className="text-muted-foreground">Total Amount</p>
+                        <p className="font-medium">{formatCurrency(getSelectedInvoice()?.total || 0)}</p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground">Already Paid</p>
+                        <p className="font-medium text-success">{formatCurrency(getSelectedInvoice()?.paid || 0)}</p>
+                      </div>
+                      <div className="col-span-2">
+                        <p className="text-muted-foreground">Due Amount</p>
+                        <p className="text-lg font-bold text-primary">{formatCurrency(getSelectedInvoice()?.due || 0)}</p>
+                      </div>
                     </div>
                   </div>
+                )}
+
+                <div className="input-group">
+                  <Label htmlFor="amount">Payment Amount (৳) *</Label>
+                  <Input
+                    id="amount"
+                    type="number"
+                    step="0.01"
+                    value={formData.amount}
+                    onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
+                    placeholder="0.00"
+                    required
+                  />
                 </div>
-              )}
 
-              <div className="input-group">
-                <Label htmlFor="amount">Payment Amount (৳) *</Label>
-                <Input
-                  id="amount"
-                  type="number"
-                  step="0.01"
-                  value={formData.amount}
-                  onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
-                  placeholder="0.00"
-                  required
-                />
-              </div>
+                <div className="input-group">
+                  <Label>Payment Method *</Label>
+                  <Select
+                    value={formData.paymentMethod}
+                    onValueChange={(value: PaymentMethod) => setFormData({ ...formData, paymentMethod: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-popover">
+                      {paymentMethods.map((method) => (
+                        <SelectItem key={method.value} value={method.value}>
+                          <div className="flex items-center gap-2">
+                            <method.icon className="w-4 h-4" />
+                            {method.label}
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
 
-              <div className="input-group">
-                <Label>Payment Method *</Label>
-                <Select
-                  value={formData.paymentMethod}
-                  onValueChange={(value: PaymentMethod) => setFormData({ ...formData, paymentMethod: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-popover">
-                    {paymentMethods.map((method) => (
-                      <SelectItem key={method.value} value={method.value}>
-                        <div className="flex items-center gap-2">
-                          <method.icon className="w-4 h-4" />
-                          {method.label}
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+                <div className="input-group">
+                  <Label htmlFor="referenceNote">Reference Note</Label>
+                  <Textarea
+                    id="referenceNote"
+                    value={formData.referenceNote}
+                    onChange={(e) => setFormData({ ...formData, referenceNote: e.target.value })}
+                    placeholder="e.g., Transaction ID, receipt number..."
+                    rows={2}
+                  />
+                </div>
 
-              <div className="input-group">
-                <Label htmlFor="referenceNote">Reference Note</Label>
-                <Textarea
-                  id="referenceNote"
-                  value={formData.referenceNote}
-                  onChange={(e) => setFormData({ ...formData, referenceNote: e.target.value })}
-                  placeholder="e.g., Transaction ID, receipt number..."
-                  rows={2}
-                />
-              </div>
-
-              <div className="flex justify-end gap-3 pt-4">
-                <Button type="button" variant="outline" onClick={() => { setDialogOpen(false); resetForm(); }}>
-                  Cancel
-                </Button>
-                <Button type="submit" disabled={addPaymentMutation.isPending}>
-                  {addPaymentMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
-                  Record Payment
-                </Button>
-              </div>
-            </form>
-          </DialogContent>
-        </Dialog>
+                <div className="flex justify-end gap-3 pt-4">
+                  <Button type="button" variant="outline" onClick={() => { setDialogOpen(false); resetForm(); }}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={addPaymentMutation.isPending}>
+                    {addPaymentMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                    Record Payment
+                  </Button>
+                </div>
+              </form>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
+
+      {/* Trash view header */}
+      {showDeleted && (
+        <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-3 flex items-center gap-2">
+          <Trash2 className="w-5 h-5 text-destructive" />
+          <span className="font-medium text-destructive">Trash / ডিলিটেড পেমেন্ট</span>
+          <span className="text-sm text-muted-foreground">({deletedPayments.length} items)</span>
+        </div>
+      )}
 
       {/* Search */}
       <div className="relative max-w-md">
@@ -408,30 +483,92 @@ export default function Payments() {
             header: 'Actions',
             render: (payment) => (
               <div className="flex items-center gap-1">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => handlePrintReceipt(payment)}
-                  title="View & Print Receipt"
-                >
-                  <FileText className="w-4 h-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => handlePrintReceipt(payment)}
-                  title="Print Receipt"
-                >
-                  <Printer className="w-4 h-4" />
-                </Button>
+                {showDeleted ? (
+                  // Trash view actions
+                  <>
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      onClick={(e) => { e.stopPropagation(); setRestoreTarget(payment); }} 
+                      title="Restore"
+                    >
+                      <RotateCcw className="w-4 h-4 text-primary" />
+                    </Button>
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      onClick={(e) => { e.stopPropagation(); setPermanentDeleteTarget(payment); }} 
+                      className="text-destructive hover:text-destructive" 
+                      title="Permanent Delete"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </>
+                ) : (
+                  // Active view actions
+                  <>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={(e) => { e.stopPropagation(); handlePrintReceipt(payment); }}
+                      title="View & Print Receipt"
+                    >
+                      <FileText className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={(e) => { e.stopPropagation(); handlePrintReceipt(payment); }}
+                      title="Print Receipt"
+                    >
+                      <Printer className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={(e) => { e.stopPropagation(); setSoftDeleteTarget(payment); }}
+                      className="text-destructive hover:text-destructive"
+                      title="Delete"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </>
+                )}
               </div>
             ),
           },
         ]}
         data={filteredPayments.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())}
         keyExtractor={(payment) => payment.id}
-        emptyMessage="No payments recorded"
-        onRowClick={(payment) => handlePrintReceipt(payment)}
+        emptyMessage={showDeleted ? "No deleted payments" : "No payments recorded"}
+        onRowClick={(payment) => !showDeleted && handlePrintReceipt(payment)}
+      />
+
+      {/* Delete Confirmation Dialogs */}
+      <SoftDeleteDialog
+        open={!!softDeleteTarget}
+        onOpenChange={(open) => !open && setSoftDeleteTarget(null)}
+        itemName={softDeleteTarget ? `Payment ৳${softDeleteTarget.amount}` : ''}
+        onConfirm={() => softDeleteTarget && handleSoftDelete(softDeleteTarget)}
+        isPending={softDeleteMutation.isPending}
+      />
+
+      <RestoreDialog
+        open={!!restoreTarget}
+        onOpenChange={(open) => !open && setRestoreTarget(null)}
+        itemName={restoreTarget ? `Payment ৳${restoreTarget.amount}` : ''}
+        onConfirm={() => restoreTarget && handleRestore(restoreTarget)}
+        isPending={restoreMutation.isPending}
+      />
+
+      <PermanentDeleteDialog
+        open={!!permanentDeleteTarget}
+        onOpenChange={(open) => !open && setPermanentDeleteTarget(null)}
+        itemName={permanentDeleteTarget ? `Payment ৳${permanentDeleteTarget.amount}` : ''}
+        itemId={permanentDeleteTarget?.id || ''}
+        table="payments"
+        onConfirm={() => permanentDeleteTarget && handlePermanentDelete(permanentDeleteTarget)}
+        isPending={permanentDeleteMutation.isPending}
       />
     </div>
   );
