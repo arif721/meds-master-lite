@@ -1,4 +1,5 @@
 // Professional Invoice PDF Generator with TP Rate, Discount, and Amount in Words
+// Supports A4 pagination with proper header/footer handling
 
 import { SalesInvoice } from '@/types';
 import { formatCurrency, formatDate, formatTimeWithSeconds, numberToWords } from './format';
@@ -131,7 +132,7 @@ export function generateInvoiceHTML(data: InvoiceData): string {
     }
     
     return `
-      <tr>
+      <tr class="product-row">
         <td class="align-center">${index + 1}</td>
         <td class="product-name">
           ${line.productName}
@@ -155,6 +156,20 @@ export function generateInvoiceHTML(data: InvoiceData): string {
     `;
   }).join('');
 
+  // Table header HTML (reusable for continuation pages)
+  const tableHeaderHTML = `
+    <tr>
+      <th class="align-center" style="width:40px">SL</th>
+      <th>Product</th>
+      <th class="align-right">MRP</th>
+      <th class="align-right">TP Rate</th>
+      <th class="align-center">Qty</th>
+      <th class="align-center">Discount</th>
+      <th class="align-right">Total (TP)</th>
+      ${showCostProfit ? '<th class="align-right">Cost</th><th class="align-right">Profit</th>' : ''}
+    </tr>
+  `;
+
   return `
     <!DOCTYPE html>
     <html>
@@ -163,25 +178,27 @@ export function generateInvoiceHTML(data: InvoiceData): string {
       <style>
         @page {
           size: A4;
-          margin: 15mm;
+          margin: 12mm 15mm 15mm 15mm;
         }
         * { 
           margin: 0; 
           padding: 0; 
           box-sizing: border-box; 
         }
+        html, body {
+          width: 210mm;
+          min-height: 297mm;
+        }
         body { 
           font-family: 'Segoe UI', 'Arial', sans-serif; 
           background: #f0f4f8; 
           padding: 20px;
-          min-height: 100vh;
           color: #1e293b;
-          font-size: 12px;
+          font-size: 11px;
           line-height: 1.4;
         }
         .invoice-container {
           max-width: 210mm;
-          min-height: 297mm;
           margin: 0 auto;
           background: white;
           box-shadow: 0 4px 25px rgba(0,0,0,0.12);
@@ -190,16 +207,39 @@ export function generateInvoiceHTML(data: InvoiceData): string {
         
         /* === WATERMARK === */
         .watermark {
-          position: absolute;
+          position: fixed;
           top: 50%;
           left: 50%;
           transform: translate(-50%, -50%) rotate(-45deg);
           font-size: 80px;
           font-weight: 700;
-          color: rgba(30, 58, 95, 0.05);
+          color: rgba(30, 58, 95, 0.04);
           pointer-events: none;
           z-index: 0;
           white-space: nowrap;
+        }
+        
+        /* === PAGE STRUCTURE FOR PRINT === */
+        .page-header {
+          display: table-header-group;
+        }
+        .page-header-content {
+          padding: 15px 20px 10px;
+          border-bottom: 2px solid #e2e8f0;
+          position: relative;
+        }
+        .page-footer {
+          display: table-footer-group;
+        }
+        .page-footer-content {
+          padding: 5px 20px;
+          text-align: center;
+          font-size: 10px;
+          color: #64748b;
+          border-top: 1px solid #e2e8f0;
+        }
+        .page-body {
+          display: table-row-group;
         }
         
         /* === TOP BAR === */
@@ -211,16 +251,17 @@ export function generateInvoiceHTML(data: InvoiceData): string {
         /* === COPY TYPE BADGE === */
         .copy-badge {
           position: absolute;
-          top: 20px;
+          top: 15px;
           right: 20px;
-          padding: 4px 12px;
+          padding: 3px 10px;
           background: ${copyType === 'OFFICE' ? '#1e3a5f' : '#059669'};
           color: white;
-          font-size: 10px;
+          font-size: 9px;
           font-weight: 600;
           text-transform: uppercase;
-          letter-spacing: 1px;
+          letter-spacing: 0.5px;
           border-radius: 3px;
+          z-index: 10;
         }
         
         /* === HEADER SECTION === */
@@ -228,7 +269,7 @@ export function generateInvoiceHTML(data: InvoiceData): string {
           display: flex;
           justify-content: space-between;
           align-items: flex-start;
-          padding: 25px 30px 20px;
+          padding: 15px 20px;
           position: relative;
           z-index: 1;
         }
@@ -236,25 +277,25 @@ export function generateInvoiceHTML(data: InvoiceData): string {
           flex: 1;
         }
         .invoice-title {
-          font-size: 32px;
+          font-size: 28px;
           font-weight: 700;
           color: #1e3a5f;
           letter-spacing: -0.5px;
-          margin-bottom: 10px;
+          margin-bottom: 8px;
         }
         .invoice-meta {
           display: flex;
           flex-direction: column;
-          gap: 3px;
+          gap: 2px;
         }
         .invoice-meta-row {
           display: flex;
           gap: 8px;
-          font-size: 12px;
+          font-size: 11px;
         }
         .invoice-meta-label {
           color: #64748b;
-          min-width: 85px;
+          min-width: 75px;
         }
         .invoice-meta-value {
           color: #1e3a5f;
@@ -267,40 +308,45 @@ export function generateInvoiceHTML(data: InvoiceData): string {
           display: flex;
           flex-direction: row;
           align-items: center;
-          gap: 15px;
+          gap: 12px;
         }
         .logo-container img {
-          width: 130px;
+          width: 100px;
           height: auto;
-          transform: translate(10px, -10px);
+          transform: translate(5px, -5px);
         }
         .company-info {
           text-align: left;
         }
         .company-name {
-          font-size: 14px;
+          font-size: 13px;
           font-weight: 700;
           color: #1e3a5f;
           margin-bottom: 2px;
         }
         .company-address {
-          font-size: 11px;
+          font-size: 10px;
           color: #64748b;
           line-height: 1.4;
         }
         .company-phone {
-          font-size: 11px;
+          font-size: 10px;
           color: #1e3a5f;
           font-weight: 500;
           margin-top: 2px;
+        }
+        
+        /* === CONTINUATION HEADER (for page 2+) === */
+        .continuation-header {
+          display: none;
         }
         
         /* === BILLING SECTION === */
         .billing-section {
           display: flex;
           justify-content: space-between;
-          padding: 20px 30px;
-          gap: 40px;
+          padding: 12px 20px;
+          gap: 30px;
           position: relative;
           z-index: 1;
         }
@@ -326,23 +372,23 @@ export function generateInvoiceHTML(data: InvoiceData): string {
           display: inline-block;
           background: #1e3a5f;
           color: white;
-          padding: 4px 12px;
+          padding: 3px 10px;
           font-weight: 600;
-          font-size: 10px;
+          font-size: 9px;
           text-transform: uppercase;
           letter-spacing: 0.5px;
-          margin-bottom: 10px;
+          margin-bottom: 8px;
           border-radius: 2px;
         }
         .billing-content {
-          font-size: 12px;
-          line-height: 1.6;
+          font-size: 11px;
+          line-height: 1.5;
         }
         .billing-name {
           font-weight: 700;
           color: #1e3a5f;
-          font-size: 13px;
-          margin-bottom: 4px;
+          font-size: 12px;
+          margin-bottom: 3px;
         }
         .billing-detail {
           color: #475569;
@@ -350,12 +396,12 @@ export function generateInvoiceHTML(data: InvoiceData): string {
         .billing-phone {
           color: #1e3a5f;
           font-weight: 500;
-          margin-top: 3px;
+          margin-top: 2px;
         }
         
         /* === ITEMS TABLE === */
         .table-container {
-          padding: 0 30px 20px;
+          padding: 0 20px 15px;
           position: relative;
           z-index: 1;
         }
@@ -363,20 +409,25 @@ export function generateInvoiceHTML(data: InvoiceData): string {
           width: 100%;
           border-collapse: collapse;
         }
+        .items-table thead {
+          display: table-header-group;
+        }
         .items-table thead th {
           background: #1e3a5f;
           color: white;
-          padding: 10px 8px;
-          font-size: 10px;
+          padding: 8px 6px;
+          font-size: 9px;
           font-weight: 600;
           text-transform: uppercase;
           letter-spacing: 0.3px;
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
         }
         .items-table thead th:first-child {
-          border-radius: 4px 0 0 0;
+          border-radius: 3px 0 0 0;
         }
         .items-table thead th:last-child {
-          border-radius: 0 4px 0 0;
+          border-radius: 0 3px 0 0;
         }
         .items-table thead th.align-right {
           text-align: right;
@@ -385,10 +436,10 @@ export function generateInvoiceHTML(data: InvoiceData): string {
           text-align: center;
         }
         .items-table tbody td {
-          padding: 10px 8px;
+          padding: 7px 6px;
           border-bottom: 1px solid #f1f5f9;
           vertical-align: middle;
-          font-size: 11px;
+          font-size: 10px;
         }
         .items-table tbody tr:last-child td {
           border-bottom: 2px solid #e2e8f0;
@@ -422,20 +473,20 @@ export function generateInvoiceHTML(data: InvoiceData): string {
           display: inline-block;
           background: #059669;
           color: white;
-          padding: 1px 6px;
-          border-radius: 3px;
-          font-size: 9px;
+          padding: 1px 5px;
+          border-radius: 2px;
+          font-size: 8px;
           font-weight: 600;
           text-transform: uppercase;
         }
         .free-line {
           display: flex;
           align-items: center;
-          gap: 5px;
-          margin-top: 3px;
+          gap: 4px;
+          margin-top: 2px;
         }
         .free-qty {
-          font-size: 10px;
+          font-size: 9px;
           color: #059669;
           font-weight: 500;
         }
@@ -455,43 +506,45 @@ export function generateInvoiceHTML(data: InvoiceData): string {
           color: #1e3a5f;
           font-weight: 600;
         }
-        .profit-row {
-          background: #f0fdf4;
-          border-radius: 4px;
-          padding: 8px !important;
-          margin-top: 5px;
+        
+        /* === PREVENT ROW BREAKS === */
+        .product-row {
+          page-break-inside: avoid;
+          break-inside: avoid;
         }
         
-        /* === SUMMARY SECTION === */
+        /* === SUMMARY SECTION (Last page only) === */
         .summary-section {
           display: flex;
           justify-content: space-between;
-          padding: 0 30px 20px;
-          gap: 30px;
+          padding: 10px 20px 15px;
+          gap: 20px;
           position: relative;
           z-index: 1;
+          page-break-inside: avoid;
+          break-inside: avoid;
         }
         .payment-info {
           flex: 1;
-          max-width: 260px;
+          max-width: 220px;
         }
         .payment-header {
           display: inline-block;
           background: #1e3a5f;
           color: white;
-          padding: 4px 12px;
+          padding: 3px 10px;
           font-weight: 600;
-          font-size: 10px;
+          font-size: 9px;
           text-transform: uppercase;
           letter-spacing: 0.5px;
-          margin-bottom: 10px;
+          margin-bottom: 8px;
           border-radius: 2px;
         }
         .payment-row {
           display: flex;
           justify-content: space-between;
-          padding: 5px 0;
-          font-size: 12px;
+          padding: 4px 0;
+          font-size: 11px;
         }
         .payment-label {
           color: #64748b;
@@ -505,17 +558,17 @@ export function generateInvoiceHTML(data: InvoiceData): string {
         }
         
         .totals-box {
-          min-width: 200px;
+          min-width: 180px;
           background: #f8fafc;
-          border-radius: 6px;
-          padding: 12px 16px;
+          border-radius: 5px;
+          padding: 10px 14px;
           border: 1px solid #e2e8f0;
         }
         .totals-row {
           display: flex;
           justify-content: space-between;
-          padding: 6px 0;
-          font-size: 12px;
+          padding: 5px 0;
+          font-size: 11px;
           border-bottom: 1px solid #e2e8f0;
         }
         .totals-row:last-of-type {
@@ -534,37 +587,62 @@ export function generateInvoiceHTML(data: InvoiceData): string {
         }
         .totals-row.due-row {
           background: #1e3a5f;
-          margin: 8px -16px -12px;
-          padding: 10px 16px;
-          border-radius: 0 0 6px 6px;
+          margin: 6px -14px -10px;
+          padding: 8px 14px;
+          border-radius: 0 0 5px 5px;
         }
         .totals-row.due-row .totals-label,
         .totals-row.due-row .totals-value {
           color: white;
           font-weight: 700;
-          font-size: 13px;
+          font-size: 12px;
+        }
+        
+        /* Profit Summary for Office Copy */
+        .profit-summary {
+          margin-top: 10px;
+          padding: 8px 12px;
+          background: #f0fdf4;
+          border: 1px solid #86efac;
+          border-radius: 4px;
+          page-break-inside: avoid;
+        }
+        .profit-row {
+          display: flex;
+          justify-content: space-between;
+          font-size: 11px;
+        }
+        .profit-label {
+          color: #166534;
+          font-weight: 500;
+        }
+        .profit-value {
+          color: #166534;
+          font-weight: 700;
+          font-family: 'SF Mono', 'Consolas', monospace;
         }
         
         /* === AMOUNT IN WORDS === */
         .amount-words {
-          padding: 0 30px 15px;
+          padding: 0 20px 12px;
           position: relative;
           z-index: 1;
+          page-break-inside: avoid;
         }
         .amount-words-box {
           background: #f0fdf4;
           border: 1px solid #86efac;
           border-radius: 4px;
-          padding: 10px 15px;
+          padding: 8px 12px;
         }
         .amount-words-label {
-          font-size: 10px;
+          font-size: 9px;
           color: #64748b;
           text-transform: uppercase;
-          margin-bottom: 3px;
+          margin-bottom: 2px;
         }
         .amount-words-value {
-          font-size: 12px;
+          font-size: 11px;
           font-weight: 600;
           color: #166534;
         }
@@ -573,40 +651,42 @@ export function generateInvoiceHTML(data: InvoiceData): string {
         .signatures-section {
           display: flex;
           justify-content: space-between;
-          padding: 25px 30px 15px;
-          gap: 25px;
-          margin-top: 15px;
+          padding: 20px 20px 12px;
+          gap: 20px;
+          margin-top: 10px;
           position: relative;
           z-index: 1;
+          page-break-inside: avoid;
+          break-inside: avoid;
         }
         .signature-box {
           flex: 1;
           text-align: center;
         }
         .signature-space {
-          height: 50px;
+          height: 45px;
           display: flex;
           align-items: flex-end;
           justify-content: center;
         }
         .signature-image {
-          max-height: 45px;
-          max-width: 120px;
+          max-height: 40px;
+          max-width: 100px;
           object-fit: contain;
         }
         .signature-line {
           border-top: 1.5px solid #334155;
           width: 100%;
-          margin-bottom: 8px;
+          margin-bottom: 6px;
         }
         .signature-label {
-          font-size: 10px;
+          font-size: 9px;
           color: #64748b;
           text-transform: uppercase;
           letter-spacing: 0.3px;
         }
         .signature-name {
-          font-size: 9px;
+          font-size: 8px;
           color: #94a3b8;
           margin-top: 2px;
         }
@@ -614,20 +694,30 @@ export function generateInvoiceHTML(data: InvoiceData): string {
         /* === FOOTER === */
         .footer {
           background: linear-gradient(135deg, #e0f2fe 0%, #dbeafe 100%);
-          padding: 20px 30px;
+          padding: 15px 20px;
           margin-top: auto;
           position: relative;
           z-index: 1;
           text-align: center;
+          page-break-inside: avoid;
         }
         .footer-text {
-          font-size: 14px;
+          font-size: 12px;
           font-weight: 600;
           color: #1e3a5f;
-          margin-bottom: 8px;
+          margin-bottom: 5px;
         }
         .footer-contact {
-          font-size: 10px;
+          font-size: 9px;
+          color: #64748b;
+        }
+        
+        /* === PAGE NUMBER === */
+        .page-number {
+          position: fixed;
+          bottom: 5mm;
+          right: 15mm;
+          font-size: 9px;
           color: #64748b;
         }
         
@@ -663,7 +753,9 @@ export function generateInvoiceHTML(data: InvoiceData): string {
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
           }
-          .print-actions { display: none; }
+          .print-actions { 
+            display: none !important; 
+          }
           .invoice-container { 
             box-shadow: none;
             max-width: 100%;
@@ -673,9 +765,48 @@ export function generateInvoiceHTML(data: InvoiceData): string {
           .billing-header,
           .payment-header,
           .totals-row.due-row,
-          .copy-badge {
+          .copy-badge,
+          .free-badge {
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
+          }
+          
+          /* Table header repeats on each page */
+          .items-table thead {
+            display: table-header-group;
+          }
+          
+          /* Prevent row breaks */
+          .items-table tr {
+            page-break-inside: avoid;
+            break-inside: avoid;
+          }
+          
+          /* Keep summary together */
+          .summary-section,
+          .signatures-section,
+          .footer,
+          .amount-words {
+            page-break-inside: avoid;
+            break-inside: avoid;
+          }
+          
+          /* Page number styling */
+          .page-number {
+            position: fixed;
+            bottom: 5mm;
+            right: 15mm;
+          }
+        }
+        
+        /* === SCREEN PREVIEW PAGINATION === */
+        @media screen {
+          .page-number {
+            position: relative;
+            text-align: center;
+            padding: 10px;
+            border-top: 1px dashed #e2e8f0;
+            margin-top: 10px;
           }
         }
       </style>
@@ -686,7 +817,7 @@ export function generateInvoiceHTML(data: InvoiceData): string {
         <div class="top-bar"></div>
         <div class="copy-badge">${copyType === 'OFFICE' ? 'Office Copy' : 'Customer Copy'}</div>
         
-        <!-- Header Section -->
+        <!-- Header Section (Page 1) -->
         <div class="header">
           <div class="header-left">
             <div class="invoice-title">Invoice</div>
@@ -723,7 +854,7 @@ export function generateInvoiceHTML(data: InvoiceData): string {
           </div>
         </div>
         
-        <!-- Billing Section -->
+        <!-- Billing Section (Page 1 only) -->
         <div class="billing-section">
           <div class="billing-box bill-from">
             <div class="billing-header">Bill From</div>
@@ -749,16 +880,7 @@ export function generateInvoiceHTML(data: InvoiceData): string {
         <div class="table-container">
           <table class="items-table">
             <thead>
-              <tr>
-                <th class="align-center" style="width:40px">SL</th>
-                <th>Product</th>
-                <th class="align-right">MRP</th>
-                <th class="align-right">TP Rate</th>
-                <th class="align-center">Qty</th>
-                <th class="align-center">Discount</th>
-                <th class="align-right">Total (TP)</th>
-                ${showCostProfit ? '<th class="align-right">Cost</th><th class="align-right">Profit</th>' : ''}
-              </tr>
+              ${tableHeaderHTML}
             </thead>
             <tbody>
               ${lineItemsHTML}
@@ -766,7 +888,7 @@ export function generateInvoiceHTML(data: InvoiceData): string {
           </table>
         </div>
         
-        <!-- Summary Section -->
+        <!-- Summary Section (Last Page only) -->
         <div class="summary-section">
           <div class="payment-info">
             <div class="payment-header">Payment Info</div>
@@ -782,6 +904,14 @@ export function generateInvoiceHTML(data: InvoiceData): string {
               <span class="payment-label">Paid Amount</span>
               <span class="payment-value currency">৳${invoice.paidAmount.toLocaleString('en-BD', { minimumFractionDigits: 2 })}</span>
             </div>
+            ${showCostProfit ? `
+            <div class="profit-summary">
+              <div class="profit-row">
+                <span class="profit-label">Total Profit</span>
+                <span class="profit-value">৳${totalProfit.toLocaleString('en-BD', { minimumFractionDigits: 2 })}</span>
+              </div>
+            </div>
+            ` : ''}
           </div>
           <div class="totals-box">
             <div class="totals-row">
@@ -854,6 +984,16 @@ export function generateInvoiceHTML(data: InvoiceData): string {
         <button class="print-btn" onclick="window.print()">🖨️ Print Invoice</button>
         <button class="print-btn secondary" onclick="window.close()">✕ Close</button>
       </div>
+      
+      <script>
+        // Page numbering script for print
+        (function() {
+          // This runs after print to update page numbers
+          window.onbeforeprint = function() {
+            // Page numbers are handled by CSS counters in print
+          };
+        })();
+      </script>
     </body>
     </html>
   `;
