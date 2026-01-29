@@ -26,6 +26,7 @@ interface QuotationData {
   sellerDesignation?: string;
   sellerPhone?: string;
   storeName?: string;
+  customerCode?: string; // Unique Customer ID (GL-XXXX)
   lines: QuotationLineData[];
   subtotal: number;
   discount: number;
@@ -49,6 +50,7 @@ export function generateQuotationHTML(data: QuotationData): string {
     sellerDesignation,
     sellerPhone,
     storeName,
+    customerCode,
     lines,
     subtotal,
     discount,
@@ -725,10 +727,10 @@ export function generateQuotationHTML(data: QuotationData): string {
                 <span class="quotation-meta-label">Time:</span>
                 <span class="quotation-meta-value">${timeStr}</span>
               </div>
-              ${storeName ? `
+              ${customerCode ? `
               <div class="quotation-meta-row">
-                <span class="quotation-meta-label">Store:</span>
-                <span class="quotation-meta-value">${storeName}</span>
+                <span class="quotation-meta-label">Customer ID:</span>
+                <span class="quotation-meta-value">${customerCode}</span>
               </div>
               ` : ''}
             </div>

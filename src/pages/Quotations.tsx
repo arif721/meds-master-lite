@@ -233,6 +233,7 @@ export default function Quotations() {
       sellerDesignation: seller?.designation || undefined,
       sellerPhone: seller?.phone || undefined,
       storeName: store?.name,
+      customerCode: (store as any)?.customer_code || undefined,
       lines: lineData,
       subtotal: quotation.subtotal,
       discount: quotation.discount,

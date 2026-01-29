@@ -66,6 +66,7 @@ export default function Stores() {
     contact_person: '',
     credit_limit: '',
     payment_terms: 'CASH' as DbStore['payment_terms'],
+    customer_code: '',
   });
 
   // Current month date range
@@ -124,6 +125,7 @@ export default function Stores() {
       credit_limit: parseFloat(formData.credit_limit) || 0,
       payment_terms: formData.payment_terms,
       active: true,
+      customer_code: formData.customer_code || null, // Allow manual entry
     };
 
     if (editingStore) {
@@ -145,6 +147,7 @@ export default function Stores() {
       contact_person: store.contact_person || '',
       credit_limit: store.credit_limit.toString(),
       payment_terms: store.payment_terms,
+      customer_code: store.customer_code || '',
     });
     setDialogOpen(true);
   };
@@ -157,6 +160,7 @@ export default function Stores() {
       contact_person: '',
       credit_limit: '',
       payment_terms: 'CASH',
+      customer_code: '',
     });
     setEditingStore(null);
   };
@@ -309,6 +313,20 @@ export default function Stores() {
                   </div>
                 </div>
 
+                <div className="input-group">
+                  <Label htmlFor="customer_code">Customer ID</Label>
+                  <Input
+                    id="customer_code"
+                    value={formData.customer_code}
+                    onChange={(e) => setFormData({ ...formData, customer_code: e.target.value })}
+                    placeholder={editingStore ? (editingStore.customer_code || 'Auto-generated') : 'Auto-generated (e.g., GL-0001)'}
+                    disabled={!editingStore} // Only editable when editing
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {editingStore ? 'You can update the Customer ID' : 'Will be auto-generated on creation'}
+                  </p>
+                </div>
+
                 <div className="flex justify-end gap-3 pt-4">
                   <Button type="button" variant="outline" onClick={() => { setDialogOpen(false); resetForm(); }}>
                     Cancel
@@ -365,6 +383,15 @@ export default function Stores() {
                   )}
                 </div>
               </div>
+            ),
+          },
+          {
+            key: 'customer_code',
+            header: 'Customer ID',
+            render: (store) => (
+              <span className="font-mono text-primary font-medium">
+                {store.customer_code || '—'}
+              </span>
             ),
           },
           {
