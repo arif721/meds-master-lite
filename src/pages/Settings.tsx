@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Download, Upload, Database, AlertTriangle, Users, Trash2, RefreshCw, Loader2, CalendarDays, PenTool } from 'lucide-react';
+import { Download, Upload, Database, AlertTriangle, Users, Trash2, RefreshCw, Loader2, CalendarDays, PenTool, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useStore } from '@/store/useStore';
 import { toast } from '@/hooks/use-toast';
@@ -37,7 +37,9 @@ export default function Settings() {
   const [loadDemoDialogOpen, setLoadDemoDialogOpen] = useState(false);
   const [pendingRestoreData, setPendingRestoreData] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
-  const [isRestoring, setIsRestoring] = useState(false);
+const [isRestoring, setIsRestoring] = useState(false);
+  const [factoryResetDialogOpen, setFactoryResetDialogOpen] = useState(false);
+  const [isFactoryResetting, setIsFactoryResetting] = useState(false);
   const [rawMaterialsCount, setRawMaterialsCount] = useState({ materials: 0, lots: 0, movements: 0 });
 
   // Fetch raw materials counts on mount
@@ -104,6 +106,171 @@ export default function Settings() {
     }, 1000);
     
     setClearDataDialogOpen(false);
+  };
+
+  // Full database backup download function
+  const downloadFullBackup = async (): Promise<boolean> => {
+    try {
+      // Fetch ALL data from Supabase
+      const [
+        productsRes, categoriesRes, batchesRes, customersRes, sellersRes,
+        invoicesRes, invoiceLinesRes, paymentsRes, quotationsRes, quotationLinesRes,
+        stockLedgerRes, stockAdjustmentsRes, storesRes, auditLogsRes, signaturesRes,
+        materialsRes, lotsRes, movementsRes
+      ] = await Promise.all([
+        supabase.from('products').select('*'),
+        supabase.from('categories').select('*'),
+        supabase.from('batches').select('*'),
+        supabase.from('customers').select('*'),
+        supabase.from('sellers').select('*'),
+        supabase.from('invoices').select('*'),
+        supabase.from('invoice_lines').select('*'),
+        supabase.from('payments').select('*'),
+        supabase.from('quotations').select('*'),
+        supabase.from('quotation_lines').select('*'),
+        supabase.from('stock_ledger').select('*'),
+        supabase.from('stock_adjustments').select('*'),
+        supabase.from('stores').select('*'),
+        supabase.from('audit_logs').select('*'),
+        supabase.from('signatures').select('*'),
+        supabase.from('raw_materials').select('*'),
+        supabase.from('raw_material_lots').select('*'),
+        supabase.from('raw_material_movements').select('*'),
+      ]);
+
+      const fullBackup = {
+        version: '3.0',
+        type: 'full_database_backup',
+        exportedAt: new Date().toISOString(),
+        localStorage: {
+          categories: store.categories,
+          products: store.products,
+          batches: store.batches,
+          customers: store.customers,
+          sellers: store.sellers,
+          invoices: store.invoices,
+          payments: store.payments,
+          stockLedger: store.stockLedger,
+          quotations: store.quotations,
+          stockAdjustments: store.stockAdjustments,
+        },
+        supabase: {
+          products: productsRes.data || [],
+          categories: categoriesRes.data || [],
+          batches: batchesRes.data || [],
+          customers: customersRes.data || [],
+          sellers: sellersRes.data || [],
+          invoices: invoicesRes.data || [],
+          invoice_lines: invoiceLinesRes.data || [],
+          payments: paymentsRes.data || [],
+          quotations: quotationsRes.data || [],
+          quotation_lines: quotationLinesRes.data || [],
+          stock_ledger: stockLedgerRes.data || [],
+          stock_adjustments: stockAdjustmentsRes.data || [],
+          stores: storesRes.data || [],
+          audit_logs: auditLogsRes.data || [],
+          signatures: signaturesRes.data || [],
+          raw_materials: materialsRes.data || [],
+          raw_material_lots: lotsRes.data || [],
+          raw_material_movements: movementsRes.data || [],
+        },
+      };
+
+      const blob = new Blob([JSON.stringify(fullBackup, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `gazi-full-backup-before-reset-${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      return true;
+    } catch (error) {
+      console.error('Backup failed:', error);
+      return false;
+    }
+  };
+
+  // Factory Reset - delete all data from database
+  const handleFactoryReset = async () => {
+    setIsFactoryResetting(true);
+
+    try {
+      // Step 1: Download backup first
+      toast({
+        title: 'ব্যাকআপ ডাউনলোড হচ্ছে...',
+        description: 'অনুগ্রহ করে অপেক্ষা করুন...',
+      });
+
+      const backupSuccess = await downloadFullBackup();
+      if (!backupSuccess) {
+        toast({
+          title: 'ব্যাকআপ ব্যর্থ হয়েছে',
+          description: 'ব্যাকআপ ডাউনলোড করতে পারা যায়নি। রিসেট বাতিল করা হয়েছে।',
+          variant: 'destructive',
+        });
+        setIsFactoryResetting(false);
+        setFactoryResetDialogOpen(false);
+        return;
+      }
+
+      toast({
+        title: 'ব্যাকআপ সম্পন্ন!',
+        description: 'এখন ডাটাবেস রিসেট হচ্ছে...',
+      });
+
+      // Step 2: Delete all data from Supabase tables (in correct order due to foreign keys)
+      // Delete dependent tables first
+      await supabase.from('raw_material_movements').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      await supabase.from('raw_material_lots').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      await supabase.from('raw_materials').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      
+      await supabase.from('stock_adjustments').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      await supabase.from('stock_ledger').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      
+      await supabase.from('quotation_lines').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      await supabase.from('quotations').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      
+      await supabase.from('invoice_lines').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      await supabase.from('payments').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      await supabase.from('invoices').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      
+      await supabase.from('signatures').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      await supabase.from('batches').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      await supabase.from('products').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      await supabase.from('categories').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      
+      await supabase.from('customers').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      await supabase.from('sellers').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      await supabase.from('stores').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      
+      await supabase.from('audit_logs').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+
+      // Step 3: Clear localStorage
+      localStorage.removeItem('pharma-inventory-store');
+
+      toast({
+        title: '✅ ফ্যাক্টরি রিসেট সম্পন্ন!',
+        description: 'সমস্ত ডাটা মুছে ফেলা হয়েছে। পেজ রিলোড হচ্ছে...',
+      });
+
+      // Reload page
+      setTimeout(() => {
+        window.location.reload();
+      }, 1500);
+
+    } catch (error: any) {
+      toast({
+        title: 'রিসেট ব্যর্থ হয়েছে',
+        description: error.message || 'কিছু সমস্যা হয়েছে',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsFactoryResetting(false);
+      setFactoryResetDialogOpen(false);
+    }
   };
 
   const handleExportBackup = async () => {
@@ -452,6 +619,48 @@ export default function Settings() {
             </div>
           </div>
 
+          {/* Factory Reset - Full Database Reset */}
+          <div className="card p-6 border-destructive bg-destructive/5">
+            <div className="flex items-start gap-4">
+              <div className="p-3 rounded-xl bg-destructive/20">
+                <RotateCcw className="w-6 h-6 text-destructive" />
+              </div>
+              <div className="flex-1">
+                <h3 className="font-semibold text-lg text-destructive">🔴 Factory Reset (Full Database)</h3>
+                <p className="text-muted-foreground text-sm mt-1">
+                  পুরো ডাটাবেস সম্পূর্ণ মুছে ফেলুন - Supabase ও Local Storage সহ সব কিছু।
+                </p>
+                <div className="mt-4 p-3 bg-destructive/10 border border-destructive/30 rounded-lg text-sm">
+                  <p className="font-medium mb-2 text-destructive">⚠️ এই অ্যাকশন সম্পর্কে:</p>
+                  <ul className="text-muted-foreground space-y-1">
+                    <li>• প্রথমে সম্পূর্ণ ব্যাকআপ স্বয়ংক্রিয়ভাবে ডাউনলোড হবে</li>
+                    <li>• তারপর সমস্ত টেবিল থেকে ডাটা মুছে ফেলা হবে</li>
+                    <li>• Products, Invoices, Customers, Raw Materials - সব কিছু!</li>
+                    <li className="text-destructive font-medium">• এই অ্যাকশন ফেরত নেওয়া যাবে না!</li>
+                  </ul>
+                </div>
+                <Button
+                  variant="destructive"
+                  onClick={() => setFactoryResetDialogOpen(true)}
+                  className="mt-4"
+                  disabled={isFactoryResetting}
+                >
+                  {isFactoryResetting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      রিসেট হচ্ছে...
+                    </>
+                  ) : (
+                    <>
+                      <RotateCcw className="w-4 h-4 mr-2" />
+                      Factory Reset
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </div>
+
           {/* Info */}
           <div className="card p-6 bg-muted/30">
             <div className="flex items-start gap-4">
@@ -571,6 +780,53 @@ export default function Settings() {
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={handleLoadDemoData}>
               Yes, Load Demo Data
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Factory Reset Confirmation Dialog */}
+      <AlertDialog open={factoryResetDialogOpen} onOpenChange={setFactoryResetDialogOpen}>
+        <AlertDialogContent className="border-destructive">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-destructive">
+              <RotateCcw className="w-5 h-5" />
+              🔴 Factory Reset - সতর্কতা!
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-3">
+              <p>এটি পুরো ডাটাবেস সম্পূর্ণ মুছে ফেলবে:</p>
+              <div className="text-sm space-y-1">
+                <p>• ✅ প্রথমে সম্পূর্ণ ব্যাকআপ ডাউনলোড হবে</p>
+                <p>• 🗑️ Products, Categories, Batches</p>
+                <p>• 🗑️ Customers, Sellers, Stores</p>
+                <p>• 🗑️ Invoices, Payments, Quotations</p>
+                <p>• 🗑️ Raw Materials, Lots, Movements</p>
+                <p>• 🗑️ Stock Ledger, Adjustments</p>
+                <p>• 🗑️ Audit Logs, Signatures</p>
+              </div>
+              <p className="font-bold text-destructive pt-2">
+                ⚠️ এই অ্যাকশন ফেরত নেওয়া যাবে না! আপনি কি নিশ্চিত?
+              </p>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isFactoryResetting}>বাতিল করুন</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleFactoryReset} 
+              className="bg-destructive hover:bg-destructive/90"
+              disabled={isFactoryResetting}
+            >
+              {isFactoryResetting ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  রিসেট হচ্ছে...
+                </>
+              ) : (
+                <>
+                  <RotateCcw className="w-4 h-4 mr-2" />
+                  হ্যাঁ, Factory Reset করুন
+                </>
+              )}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
