@@ -903,14 +903,14 @@ export default function Sales() {
                           className="h-9"
                         />
                       </div>
-                      <div className="col-span-2">
+                      <div className="col-span-3">
                         <Label className="text-xs mb-1 block">Discount</Label>
                         <div className="flex gap-1">
                           <Select
                             value={line.discountType}
                             onValueChange={(value: 'AMOUNT' | 'PERCENT') => updateLine(index, 'discountType', value)}
                           >
-                            <SelectTrigger className="h-9 w-16">
+                            <SelectTrigger className="h-9 w-20">
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent className="bg-popover">
