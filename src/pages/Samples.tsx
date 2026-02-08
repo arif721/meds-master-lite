@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { useProducts, useBatches, useCustomers, useSellers } from '@/hooks/useDatabase';
 import { useStores } from '@/hooks/useStores';
 import { useSamples, useSampleLines, DbSample, DbSampleLine } from '@/hooks/useSamples';
+import { useDefaultSignature } from '@/hooks/useSignatures';
 import { startOfDay, endOfDay, isWithinInterval, parseISO, startOfMonth, endOfMonth } from 'date-fns';
 import { DateRange } from '@/components/SalesDateFilter';
 import { SampleCreateDialog } from '@/components/samples/SampleCreateDialog';
@@ -24,6 +25,7 @@ export default function Samples() {
   const { data: dbSellers = [] } = useSellers();
   const { data: dbSamples = [], isLoading: samplesLoading } = useSamples();
   const { data: dbSampleLines = [] } = useSampleLines();
+  const preparedBySig = useDefaultSignature(null, 'prepared_by');
 
   const [search, setSearch] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
@@ -162,8 +164,10 @@ export default function Samples() {
         stores={stores}
         customers={customers}
         sellers={dbSellers}
+        batches={dbBatches}
         showDeleted={showDeleted}
         onView={setDetailSample}
+        preparedBySignatureUrl={preparedBySig?.image_url}
       />
 
       {/* Create Dialog */}
@@ -186,6 +190,7 @@ export default function Samples() {
         customers={customers}
         sellers={dbSellers}
         batches={dbBatches}
+        preparedBySignatureUrl={preparedBySig?.image_url}
       />
     </div>
   );

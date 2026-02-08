@@ -4,7 +4,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { formatCurrency, formatDateOnly, formatTimeWithSeconds } from '@/lib/format';
 import { SampleWithLines } from '@/pages/Samples';
 import { useUpdateSampleStatus, useSoftDeleteSample } from '@/hooks/useSamples';
-import { CheckCircle, XCircle, Trash2 } from 'lucide-react';
+import { openSampleCopy, openSampleOfficeCopy } from '@/lib/sampleInvoice';
+import { CheckCircle, XCircle, Trash2, Printer, FileText } from 'lucide-react';
 
 type Props = {
   sample: SampleWithLines | null;
@@ -12,8 +13,10 @@ type Props = {
   products: { id: string; name: string }[];
   stores: { id: string; name: string }[];
   customers: { id: string; name: string }[];
-  sellers: { id: string; name: string }[];
+  sellers: { id: string; name: string; designation?: string | null; phone?: string | null }[];
   batches: { id: string; batch_number: string }[];
+  preparedBySignatureUrl?: string;
+  representativeSignatureUrl?: string;
 };
 
 const statusColors: Record<string, string> = {
@@ -22,7 +25,7 @@ const statusColors: Record<string, string> = {
   CANCELLED: 'bg-destructive/10 text-destructive',
 };
 
-export function SampleDetailDialog({ sample, onClose, products, stores, customers, sellers, batches }: Props) {
+export function SampleDetailDialog({ sample, onClose, products, stores, customers, sellers, batches, preparedBySignatureUrl, representativeSignatureUrl }: Props) {
   const updateStatus = useUpdateSampleStatus();
   const softDelete = useSoftDeleteSample();
 
@@ -34,8 +37,36 @@ export function SampleDetailDialog({ sample, onClose, products, stores, customer
   const getCustomerName = (id: string | null) => id ? customers.find(c => c.id === id)?.name : null;
   const getSellerName = (id: string | null) => id ? sellers.find(s => s.id === id)?.name : null;
 
+  const seller = sample.seller_id ? sellers.find(s => s.id === sample.seller_id) : null;
+  const store = sample.store_id ? stores.find(s => s.id === sample.store_id) : null;
+  const customer = sample.customer_id ? customers.find(c => c.id === sample.customer_id) : null;
+
   const totalCost = sample.lines.reduce((s, l) => s + l.cost_price * l.quantity, 0);
   const totalQty = sample.lines.reduce((s, l) => s + l.quantity, 0);
+
+  const buildPrintData = () => ({
+    sampleNumber: sample.sample_number,
+    saleDateTime: sample.sale_date_time,
+    status: sample.status,
+    storeName: store?.name,
+    customerName: customer?.name,
+    receiverName: sample.receiver_name || undefined,
+    receiverPhone: sample.receiver_phone || undefined,
+    sellerName: seller?.name,
+    sellerDesignation: seller?.designation || undefined,
+    sellerPhone: seller?.phone || undefined,
+    notes: sample.notes || undefined,
+    lines: sample.lines.map(l => ({
+      productName: getProductName(l.product_id),
+      batchNumber: getBatchNumber(l.batch_id),
+      quantity: l.quantity,
+      tpRate: l.tp_rate,
+      costPrice: l.cost_price,
+      tpTotal: l.total,
+    })),
+    preparedBySignatureUrl,
+    representativeSignatureUrl,
+  });
 
   return (
     <Dialog open={!!sample} onOpenChange={v => { if (!v) onClose(); }}>
@@ -98,23 +129,33 @@ export function SampleDetailDialog({ sample, onClose, products, stores, customer
           </div>
 
           {/* Actions */}
-          {!sample.is_deleted && (
-            <div className="flex gap-2 justify-end">
-              {sample.status === 'DRAFT' && (
-                <Button size="sm" onClick={() => { updateStatus.mutate({ sampleId: sample.id, newStatus: 'CONFIRMED', oldStatus: sample.status }); onClose(); }}>
-                  <CheckCircle className="w-4 h-4 mr-1" /> Confirm
-                </Button>
-              )}
-              {sample.status === 'CONFIRMED' && (
-                <Button size="sm" variant="outline" onClick={() => { updateStatus.mutate({ sampleId: sample.id, newStatus: 'CANCELLED', oldStatus: sample.status }); onClose(); }}>
-                  <XCircle className="w-4 h-4 mr-1" /> Cancel
-                </Button>
-              )}
-              <Button size="sm" variant="destructive" onClick={() => { softDelete.mutate({ sampleId: sample.id }); onClose(); }}>
-                <Trash2 className="w-4 h-4 mr-1" /> Delete
+          <div className="flex gap-2 justify-between flex-wrap">
+            <div className="flex gap-2">
+              <Button size="sm" variant="outline" onClick={() => openSampleCopy(buildPrintData())}>
+                <Printer className="w-4 h-4 mr-1" /> Sample Copy
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => openSampleOfficeCopy(buildPrintData())}>
+                <FileText className="w-4 h-4 mr-1" /> Office Copy
               </Button>
             </div>
-          )}
+            {!sample.is_deleted && (
+              <div className="flex gap-2">
+                {sample.status === 'DRAFT' && (
+                  <Button size="sm" onClick={() => { updateStatus.mutate({ sampleId: sample.id, newStatus: 'CONFIRMED', oldStatus: sample.status }); onClose(); }}>
+                    <CheckCircle className="w-4 h-4 mr-1" /> Confirm
+                  </Button>
+                )}
+                {sample.status === 'CONFIRMED' && (
+                  <Button size="sm" variant="outline" onClick={() => { updateStatus.mutate({ sampleId: sample.id, newStatus: 'CANCELLED', oldStatus: sample.status }); onClose(); }}>
+                    <XCircle className="w-4 h-4 mr-1" /> Cancel
+                  </Button>
+                )}
+                <Button size="sm" variant="destructive" onClick={() => { softDelete.mutate({ sampleId: sample.id }); onClose(); }}>
+                  <Trash2 className="w-4 h-4 mr-1" /> Delete
+                </Button>
+              </div>
+            )}
+          </div>
         </div>
       </DialogContent>
     </Dialog>
