@@ -113,6 +113,67 @@ export function useSoftDelete(table: SoftDeleteTable) {
   
   return useMutation({
     mutationFn: async ({ id, name }: { id: string; name: string }) => {
+      // INVOICE STOCK ROLLBACK: If deleting a confirmed invoice, restore stock
+      if (table === 'invoices') {
+        const { data: invoice } = await supabase
+          .from('invoices')
+          .select('status, invoice_number')
+          .eq('id', id)
+          .single();
+        
+        if (invoice && (invoice.status === 'CONFIRMED' || invoice.status === 'PAID' || invoice.status === 'PARTIAL')) {
+          // Get invoice lines
+          const { data: lines } = await supabase
+            .from('invoice_lines')
+            .select('*')
+            .eq('invoice_id', id);
+          
+          if (lines) {
+            for (const line of lines) {
+              if (line.batch_id) {
+                const totalQty = (line.quantity || 0) + (line.free_quantity || 0);
+                
+                // Restore batch stock
+                const { data: batch } = await supabase
+                  .from('batches')
+                  .select('quantity')
+                  .eq('id', line.batch_id)
+                  .single();
+                
+                if (batch) {
+                  await supabase
+                    .from('batches')
+                    .update({ quantity: batch.quantity + totalQty })
+                    .eq('id', line.batch_id);
+                }
+                
+                // Add reversal stock ledger entries
+                if (line.quantity > 0) {
+                  await supabase.from('stock_ledger').insert({
+                    product_id: line.product_id,
+                    batch_id: line.batch_id,
+                    type: 'RETURN',
+                    quantity: line.quantity,
+                    reference: invoice.invoice_number,
+                    notes: `Stock reversal (invoice deleted): +${line.quantity}`,
+                  });
+                }
+                if (line.free_quantity > 0) {
+                  await supabase.from('stock_ledger').insert({
+                    product_id: line.product_id,
+                    batch_id: line.batch_id,
+                    type: 'RETURN',
+                    quantity: line.free_quantity,
+                    reference: invoice.invoice_number,
+                    notes: `Free qty reversal (invoice deleted): +${line.free_quantity}`,
+                  });
+                }
+              }
+            }
+          }
+        }
+      }
+
       let error: any = null;
       
       // Use specific table updates to avoid TypeScript issues
@@ -149,7 +210,7 @@ export function useSoftDelete(table: SoftDeleteTable) {
         entity_type: entityType,
         entity_id: id,
         entity_name: name,
-        changes: { soft_delete: true },
+        changes: { soft_delete: true, stock_rollback: table === 'invoices' },
       });
       
       return { id, name };
@@ -157,9 +218,15 @@ export function useSoftDelete(table: SoftDeleteTable) {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: [table] });
       queryClient.invalidateQueries({ queryKey: ['audit_logs'] });
+      if (table === 'invoices') {
+        queryClient.invalidateQueries({ queryKey: ['batches'] });
+        queryClient.invalidateQueries({ queryKey: ['stock_ledger'] });
+      }
       toast({ 
         title: `${label.pluralBn} ট্র্যাশে সরানো হয়েছে`,
-        description: `"${data.name}" ট্র্যাশে সরানো হয়েছে। পরে রিস্টোর করতে পারবেন।`,
+        description: table === 'invoices' 
+          ? `"${data.name}" ট্র্যাশে সরানো হয়েছে এবং স্টক ফিরিয়ে দেওয়া হয়েছে।`
+          : `"${data.name}" ট্র্যাশে সরানো হয়েছে। পরে রিস্টোর করতে পারবেন।`,
       });
     },
     onError: (error: Error) => {

@@ -244,7 +244,7 @@ export type Database = {
       invoices: {
         Row: {
           created_at: string
-          customer_id: string
+          customer_id: string | null
           deleted_at: string | null
           deleted_by: string | null
           discount: number
@@ -255,6 +255,7 @@ export type Database = {
           is_deleted: boolean
           notes: string | null
           paid: number
+          sale_date_time: string | null
           seller_id: string | null
           status: Database["public"]["Enums"]["invoice_status"]
           store_id: string | null
@@ -263,7 +264,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
-          customer_id: string
+          customer_id?: string | null
           deleted_at?: string | null
           deleted_by?: string | null
           discount?: number
@@ -274,6 +275,7 @@ export type Database = {
           is_deleted?: boolean
           notes?: string | null
           paid?: number
+          sale_date_time?: string | null
           seller_id?: string | null
           status?: Database["public"]["Enums"]["invoice_status"]
           store_id?: string | null
@@ -282,7 +284,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
-          customer_id?: string
+          customer_id?: string | null
           deleted_at?: string | null
           deleted_by?: string | null
           discount?: number
@@ -293,6 +295,7 @@ export type Database = {
           is_deleted?: boolean
           notes?: string | null
           paid?: number
+          sale_date_time?: string | null
           seller_id?: string | null
           status?: Database["public"]["Enums"]["invoice_status"]
           store_id?: string | null
@@ -753,6 +756,134 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      sample_lines: {
+        Row: {
+          batch_id: string | null
+          cost_price: number
+          id: string
+          product_id: string
+          quantity: number
+          sample_id: string
+          total: number
+          tp_rate: number
+        }
+        Insert: {
+          batch_id?: string | null
+          cost_price?: number
+          id?: string
+          product_id: string
+          quantity?: number
+          sample_id: string
+          total?: number
+          tp_rate?: number
+        }
+        Update: {
+          batch_id?: string | null
+          cost_price?: number
+          id?: string
+          product_id?: string
+          quantity?: number
+          sample_id?: string
+          total?: number
+          tp_rate?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sample_lines_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sample_lines_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sample_lines_sample_id_fkey"
+            columns: ["sample_id"]
+            isOneToOne: false
+            referencedRelation: "samples"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      samples: {
+        Row: {
+          created_at: string
+          customer_id: string | null
+          deleted_at: string | null
+          deleted_by: string | null
+          id: string
+          is_deleted: boolean
+          notes: string | null
+          receiver_name: string | null
+          receiver_phone: string | null
+          sale_date_time: string
+          sample_number: string
+          seller_id: string | null
+          store_id: string | null
+          total_value: number
+        }
+        Insert: {
+          created_at?: string
+          customer_id?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
+          id?: string
+          is_deleted?: boolean
+          notes?: string | null
+          receiver_name?: string | null
+          receiver_phone?: string | null
+          sale_date_time?: string
+          sample_number: string
+          seller_id?: string | null
+          store_id?: string | null
+          total_value?: number
+        }
+        Update: {
+          created_at?: string
+          customer_id?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
+          id?: string
+          is_deleted?: boolean
+          notes?: string | null
+          receiver_name?: string | null
+          receiver_phone?: string | null
+          sale_date_time?: string
+          sample_number?: string
+          seller_id?: string | null
+          store_id?: string | null
+          total_value?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "samples_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "samples_seller_id_fkey"
+            columns: ["seller_id"]
+            isOneToOne: false
+            referencedRelation: "sellers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "samples_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       sellers: {
         Row: {
