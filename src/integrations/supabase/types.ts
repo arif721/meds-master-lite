@@ -826,6 +826,7 @@ export type Database = {
           sale_date_time: string
           sample_number: string
           seller_id: string | null
+          status: Database["public"]["Enums"]["sample_status"]
           store_id: string | null
           total_value: number
         }
@@ -842,6 +843,7 @@ export type Database = {
           sale_date_time?: string
           sample_number: string
           seller_id?: string | null
+          status?: Database["public"]["Enums"]["sample_status"]
           store_id?: string | null
           total_value?: number
         }
@@ -858,6 +860,7 @@ export type Database = {
           sale_date_time?: string
           sample_number?: string
           seller_id?: string | null
+          status?: Database["public"]["Enums"]["sample_status"]
           store_id?: string | null
           total_value?: number
         }
@@ -1192,6 +1195,7 @@ export type Database = {
         | "TRANSFER_IN"
         | "TRANSFER_OUT"
         | "ADJUSTMENT"
+      sample_status: "DRAFT" | "CONFIRMED" | "CANCELLED"
       stock_ledger_type:
         | "OPENING"
         | "PURCHASE"
@@ -1387,6 +1391,7 @@ export const Constants = {
         "TRANSFER_OUT",
         "ADJUSTMENT",
       ],
+      sample_status: ["DRAFT", "CONFIRMED", "CANCELLED"],
       stock_ledger_type: [
         "OPENING",
         "PURCHASE",
