@@ -232,22 +232,8 @@ export function InvoiceEditDialog({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!formData.customerId) {
-      toast({
-        title: 'Customer Required',
-        description: 'Please select a customer',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    if (!formData.storeId) {
-      toast({
-        title: 'Store Required',
-        description: 'Please select a store',
-        variant: 'destructive',
-      });
-      return;
+    if (!formData.sellerId) {
+      // Just a warning, not blocking
     }
 
     if (formData.lines.length === 0) {
@@ -352,9 +338,9 @@ export function InvoiceEditDialog({
       await updateInvoiceMutation.mutateAsync({
         id: invoice.id,
         invoice: {
-          customer_id: formData.customerId,
+          customer_id: formData.customerId || null,
           seller_id: formData.sellerId || null,
-          store_id: formData.storeId,
+          store_id: formData.storeId || null,
           subtotal: subtotal,
           discount: overallDiscountAmount,
           total: total,

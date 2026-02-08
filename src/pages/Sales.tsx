@@ -98,6 +98,7 @@ export default function Sales() {
     customerId: '',
     sellerId: '',
     storeId: '',
+    saleDateTime: '',
     overallDiscountType: 'AMOUNT' as 'AMOUNT' | 'PERCENT',
     overallDiscountValue: '',
     lines: [] as {
@@ -128,13 +129,13 @@ export default function Sales() {
       // Search filter
       const matchesSearch = 
         inv.invoice_number.toLowerCase().includes(search.toLowerCase()) ||
-        customers.find((c) => c.id === inv.customer_id)?.name.toLowerCase().includes(search.toLowerCase());
+        (inv.customer_id && customers.find((c) => c.id === inv.customer_id)?.name.toLowerCase().includes(search.toLowerCase()));
       
       if (!matchesSearch) return false;
 
       // Date range filter
       if (dateRange.from || dateRange.to) {
-        const invoiceDate = parseISO(inv.created_at);
+        const invoiceDate = parseISO(inv.sale_date_time || inv.created_at);
         const start = dateRange.from ? startOfDay(dateRange.from) : new Date(0);
         const end = dateRange.to ? endOfDay(dateRange.to) : endOfDay(new Date());
         
@@ -176,7 +177,8 @@ export default function Sales() {
     );
   };
 
-  const getCustomerName = (customerId: string) => {
+  const getCustomerName = (customerId: string | null) => {
+    if (!customerId) return 'Walk-in';
     return customers.find((c) => c.id === customerId)?.name || 'Unknown';
   };
 
@@ -294,34 +296,12 @@ export default function Sales() {
   const handleSubmit = async (e: React.FormEvent, asDraft: boolean = false) => {
     e.preventDefault();
 
-    // Validate customer is selected
-    if (!formData.customerId) {
-      toast({
-        title: 'Customer Required',
-        description: 'Please select a customer',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    // Validate store is selected
-    if (!formData.storeId) {
-      toast({
-        title: 'Store Required',
-        description: 'Please select a store',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    // CRITICAL: Seller is MANDATORY for invoice creation
+    // Seller is still recommended but not blocking
     if (!formData.sellerId) {
       toast({
-        title: 'Seller Required',
-        description: 'Please select a seller/representative. Invoice cannot be created without seller.',
-        variant: 'destructive',
+        title: 'Seller Recommended',
+        description: 'No seller selected. Proceeding without seller.',
       });
-      return;
     }
 
     if (formData.lines.length === 0) {
@@ -428,12 +408,15 @@ export default function Sales() {
 
     try {
       // Create invoice in database
+      // Calculate sale_date_time
+      const saleDateTime = formData.saleDateTime ? new Date(formData.saleDateTime).toISOString() : new Date().toISOString();
+
       const createdInvoice = await addInvoiceMutation.mutateAsync({
         invoice: {
           invoice_number: invoiceNumber,
-          customer_id: formData.customerId,
+          customer_id: formData.customerId || null,
           seller_id: formData.sellerId || null,
-          store_id: formData.storeId,
+          store_id: formData.storeId || null,
           status: 'DRAFT',
           subtotal: subtotal,
           discount: overallDiscountAmount,
@@ -441,6 +424,7 @@ export default function Sales() {
           paid: 0,
           due: total,
           notes: null,
+          sale_date_time: saleDateTime,
         },
         lines: invoiceLines,
       });
@@ -509,6 +493,7 @@ export default function Sales() {
       customerId: '', 
       sellerId: '', 
       storeId: '', 
+      saleDateTime: '',
       overallDiscountType: 'AMOUNT',
       overallDiscountValue: '',
       lines: [] 
@@ -555,7 +540,7 @@ export default function Sales() {
     const invoiceForPrint = {
       id: invoice.id,
       invoiceNumber: invoice.invoice_number,
-      date: new Date(invoice.created_at),
+      date: new Date(invoice.sale_date_time || invoice.created_at),
       customerId: invoice.customer_id,
       sellerId: invoice.seller_id,
       storeId: invoice.store_id,
@@ -573,7 +558,7 @@ export default function Sales() {
         unitPrice: line.unit_price, // MRP
         lineTotal: line.total,
       })),
-      createdAt: new Date(invoice.created_at),
+      createdAt: new Date(invoice.sale_date_time || invoice.created_at),
     };
     
     // Enhanced line data with TP Rate and Cost Price
@@ -695,16 +680,27 @@ export default function Sales() {
               <DialogTitle>Create Sales Invoice</DialogTitle>
             </DialogHeader>
             <form onSubmit={(e) => handleSubmit(e, false)} className="space-y-4">
+              {/* Sale Date & Time */}
               <div className="input-group">
-                <Label>Customer *</Label>
+                <Label>Sale Date & Time</Label>
+                <Input
+                  type="datetime-local"
+                  value={formData.saleDateTime || new Date(new Date().getTime() + 6 * 60 * 60 * 1000).toISOString().slice(0, 16)}
+                  onChange={(e) => setFormData({ ...formData, saleDateTime: e.target.value })}
+                />
+              </div>
+
+              <div className="input-group">
+                <Label>Customer (Optional)</Label>
                 <Select
                   value={formData.customerId}
-                  onValueChange={(value) => setFormData({ ...formData, customerId: value })}
+                  onValueChange={(value) => setFormData({ ...formData, customerId: value === 'none' ? '' : value })}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select customer" />
                   </SelectTrigger>
                   <SelectContent className="bg-popover">
+                    <SelectItem value="none">No customer</SelectItem>
                     {customers.map((customer) => (
                       <SelectItem key={customer.id} value={customer.id}>
                         {customer.name}
@@ -714,16 +710,18 @@ export default function Sales() {
                 </Select>
               </div>
 
+
               <div className="input-group">
-                <Label>Store *</Label>
+                <Label>Store (Optional)</Label>
                 <Select
                   value={formData.storeId}
-                  onValueChange={(value) => setFormData({ ...formData, storeId: value })}
+                  onValueChange={(value) => setFormData({ ...formData, storeId: value === 'none_store' ? '' : value })}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select store" />
                   </SelectTrigger>
                   <SelectContent className="bg-popover">
+                    <SelectItem value="none_store">No store</SelectItem>
                     {stores.filter(s => s.active).map((store) => (
                       <SelectItem key={store.id} value={store.id}>
                         {store.name} ({PAYMENT_TERMS_LABELS[store.payment_terms]})
@@ -1066,12 +1064,15 @@ export default function Sales() {
           {
             key: 'date',
             header: 'Date',
-            render: (inv) => (
-              <div className="flex flex-col">
-                <span className="font-medium">{formatDateOnly(inv.created_at)}</span>
-                <span className="text-xs text-muted-foreground">{formatTimeWithSeconds(inv.created_at)}</span>
-              </div>
-            ),
+            render: (inv) => {
+              const dateStr = inv.sale_date_time || inv.created_at;
+              return (
+                <div className="flex flex-col">
+                  <span className="font-medium">{formatDateOnly(dateStr)}</span>
+                  <span className="text-xs text-muted-foreground">{formatTimeWithSeconds(dateStr)}</span>
+                </div>
+              );
+            },
           },
           {
             key: 'customer',

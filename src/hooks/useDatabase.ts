@@ -82,7 +82,7 @@ export type DbCustomer = {
 export type DbInvoice = {
   id: string;
   invoice_number: string;
-  customer_id: string;
+  customer_id: string | null;
   seller_id: string | null;
   store_id: string | null;
   status: 'DRAFT' | 'CONFIRMED' | 'PAID' | 'PARTIAL' | 'CANCELLED';
@@ -93,6 +93,7 @@ export type DbInvoice = {
   due: number;
   notes: string | null;
   created_at: string;
+  sale_date_time: string | null;
   is_deleted?: boolean;
   deleted_at?: string | null;
   deleted_by?: string | null;

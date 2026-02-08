@@ -227,6 +227,9 @@ const [isRestoring, setIsRestoring] = useState(false);
       await supabase.from('raw_material_lots').delete().neq('id', '00000000-0000-0000-0000-000000000000');
       await supabase.from('raw_materials').delete().neq('id', '00000000-0000-0000-0000-000000000000');
       
+      await supabase.from('sample_lines').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      await supabase.from('samples').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      
       await supabase.from('stock_adjustments').delete().neq('id', '00000000-0000-0000-0000-000000000000');
       await supabase.from('stock_ledger').delete().neq('id', '00000000-0000-0000-0000-000000000000');
       

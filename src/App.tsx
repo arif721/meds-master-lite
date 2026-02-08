@@ -28,6 +28,7 @@ import StoreDetails from "./pages/StoreDetails";
 import SellerDetails from "./pages/SellerDetails";
 import RawMaterials from "./pages/RawMaterials";
 import DemoRun from "./pages/DemoRun";
+import Samples from "./pages/Samples";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -114,6 +115,7 @@ function AppRoutes() {
                   <Route path="/quotations" element={<Quotations />} />
                   <Route path="/sales" element={<Sales />} />
                   <Route path="/payments" element={<Payments />} />
+                  <Route path="/samples" element={<Samples />} />
                   <Route path="/adjustments" element={<Adjustments />} />
                   <Route path="/reports" element={<Reports />} />
                   <Route path="/sellers/:sellerId" element={<SellerDetails />} />

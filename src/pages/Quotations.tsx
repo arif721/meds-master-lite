@@ -527,6 +527,7 @@ export default function Quotations() {
           paid: 0,
           due: quotation.total,
           notes: `Converted from ${quotation.quotation_number}`,
+          sale_date_time: new Date().toISOString(),
         },
         lines: invoiceLines,
       });
