@@ -187,7 +187,9 @@ export function generateSampleInvoiceHTML(data: SampleInvoiceData): string {
         <div class="totals-row due-row"><span class="totals-label">Due</span><span class="totals-value">৳0.00</span></div>
       </div>
     </div>
-    <div class="sample-note">This is a Sample Delivery. Stock has been deducted from inventory.</div>
+    ${copyType === 'OFFICE' 
+      ? '<div class="sample-note office-note">Inventory adjusted via Sample module. Stock has been deducted.</div>' 
+      : '<div class="sample-note customer-note">Sample Delivery Note (No Commercial Value)</div>'}
     <div class="amount-words">
       <div class="amount-words-box">
         <div class="amount-words-label">Sample Value in Words</div>
@@ -324,7 +326,9 @@ body { font-family: 'Segoe UI', 'Arial', sans-serif; background: #f0f4f8; paddin
 .profit-row { display: flex; justify-content: space-between; font-size: 11px; }
 .profit-label { color: #92400e; font-weight: 500; }
 .profit-value { color: #92400e; font-weight: 700; font-family: 'SF Mono', 'Consolas', monospace; }
-.sample-note { margin: 0 20px 8px; padding: 6px 12px; background: #ecfdf5; border: 1px solid #86efac; border-radius: 4px; font-size: 10px; color: #166534; font-weight: 500; text-align: center; page-break-inside: avoid; }
+.sample-note { margin: 0 20px 8px; padding: 6px 12px; border-radius: 4px; font-size: 10px; font-weight: 500; text-align: center; page-break-inside: avoid; }
+.sample-note.office-note { background: #ecfdf5; border: 1px solid #86efac; color: #166534; }
+.sample-note.customer-note { background: #f8fafc; border: 1px solid #e2e8f0; color: #64748b; font-style: italic; }
 .amount-words { padding: 0 20px 12px; position: relative; z-index: 1; page-break-inside: avoid; }
 .amount-words-box { background: #f0fdf4; border: 1px solid #86efac; border-radius: 4px; padding: 8px 12px; }
 .amount-words-label { font-size: 9px; color: #64748b; text-transform: uppercase; margin-bottom: 2px; }
